@@ -18,6 +18,7 @@ package com.android.voicemail.impl;
 import android.annotation.TargetApi;
 import android.app.PendingIntent;
 import android.content.Context;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
@@ -87,86 +88,86 @@ public class OmtpVvmCarrierConfigHelper {
 
   public static final String KEY_VVM_CLIENT_PREFIX_STRING = "vvm_client_prefix_string";
 
-  @Nullable private static PersistableBundle sOverrideConfigForTest;
+  @Nullable private static PersistableBundle overrideConfigForTest;
 
-  private final Context mContext;
-  private final PersistableBundle mCarrierConfig;
-  private final String mVvmType;
-  private final VisualVoicemailProtocol mProtocol;
-  private final PersistableBundle mTelephonyConfig;
+  private final Context context;
+  private final PersistableBundle carrierConfig;
+  private final String vvmType;
+  private final VisualVoicemailProtocol protocol;
+  private final PersistableBundle telephonyConfig;
 
-  @Nullable private final PersistableBundle mOverrideConfig;
+  @Nullable private final PersistableBundle overrideConfig;
 
-  private PhoneAccountHandle mPhoneAccountHandle;
+  private PhoneAccountHandle phoneAccountHandle;
 
   public OmtpVvmCarrierConfigHelper(Context context, @Nullable PhoneAccountHandle handle) {
-    mContext = context;
-    mPhoneAccountHandle = handle;
+    this.context = context;
+    phoneAccountHandle = handle;
     TelephonyManager telephonyManager =
         context
             .getSystemService(TelephonyManager.class)
-            .createForPhoneAccountHandle(mPhoneAccountHandle);
+            .createForPhoneAccountHandle(phoneAccountHandle);
     if (telephonyManager == null) {
       VvmLog.e(TAG, "PhoneAccountHandle is invalid");
-      mCarrierConfig = null;
-      mTelephonyConfig = null;
-      mOverrideConfig = null;
-      mVvmType = null;
-      mProtocol = null;
+      carrierConfig = null;
+      telephonyConfig = null;
+      overrideConfig = null;
+      vvmType = null;
+      protocol = null;
       return;
     }
 
-    if (sOverrideConfigForTest != null) {
-      mOverrideConfig = sOverrideConfigForTest;
-      mCarrierConfig = new PersistableBundle();
-      mTelephonyConfig = new PersistableBundle();
+    if (overrideConfigForTest != null) {
+      overrideConfig = overrideConfigForTest;
+      carrierConfig = new PersistableBundle();
+      telephonyConfig = new PersistableBundle();
     } else {
       if (ConfigOverrideFragment.isOverridden(context)) {
-        mOverrideConfig = ConfigOverrideFragment.getConfig(context);
-        VvmLog.w(TAG, "Config override is activated: " + mOverrideConfig);
+        overrideConfig = ConfigOverrideFragment.getConfig(context);
+        VvmLog.w(TAG, "Config override is activated: " + overrideConfig);
       } else {
-        mOverrideConfig = null;
+        overrideConfig = null;
       }
 
-      mCarrierConfig = getCarrierConfig(telephonyManager);
-      mTelephonyConfig =
+      carrierConfig = getCarrierConfig(telephonyManager);
+      telephonyConfig =
           new TelephonyVvmConfigManager(context).getConfig(telephonyManager.getSimOperator());
     }
 
-    mVvmType = getVvmType();
-    mProtocol = VisualVoicemailProtocolFactory.create(mContext.getResources(), mVvmType);
+    vvmType = getVvmType();
+    protocol = VisualVoicemailProtocolFactory.create(this.context.getResources(), vvmType);
   }
 
   @VisibleForTesting
   OmtpVvmCarrierConfigHelper(
       Context context, PersistableBundle carrierConfig, PersistableBundle telephonyConfig) {
-    mContext = context;
-    mCarrierConfig = carrierConfig;
-    mTelephonyConfig = telephonyConfig;
-    mOverrideConfig = null;
-    mVvmType = getVvmType();
-    mProtocol = VisualVoicemailProtocolFactory.create(mContext.getResources(), mVvmType);
+    this.context = context;
+    this.carrierConfig = carrierConfig;
+    this.telephonyConfig = telephonyConfig;
+    overrideConfig = null;
+    vvmType = getVvmType();
+    protocol = VisualVoicemailProtocolFactory.create(this.context.getResources(), vvmType);
   }
 
   public PersistableBundle getConfig() {
     PersistableBundle result = new PersistableBundle();
-    if (mTelephonyConfig != null) {
-      result.putAll(mTelephonyConfig);
+    if (telephonyConfig != null) {
+      result.putAll(telephonyConfig);
     }
-    if (mCarrierConfig != null) {
-      result.putAll(mCarrierConfig);
+    if (carrierConfig != null) {
+      result.putAll(carrierConfig);
     }
 
     return result;
   }
 
   public Context getContext() {
-    return mContext;
+    return context;
   }
 
   @Nullable
   public PhoneAccountHandle getPhoneAccountHandle() {
-    return mPhoneAccountHandle;
+    return phoneAccountHandle;
   }
 
   /**
@@ -174,7 +175,13 @@ public class OmtpVvmCarrierConfigHelper {
    * known protocol.
    */
   public boolean isValid() {
-    return mProtocol != null;
+    if (protocol == null) {
+      return false;
+    }
+    if (isCarrierAppPreloaded()) {
+      return false;
+    }
+    return true;
   }
 
   @Nullable
@@ -184,7 +191,7 @@ public class OmtpVvmCarrierConfigHelper {
 
   @Nullable
   public VisualVoicemailProtocol getProtocol() {
-    return mProtocol;
+    return protocol;
   }
 
   /** @returns arbitrary String stored in the config file. Used for protocol specific values. */
@@ -197,15 +204,20 @@ public class OmtpVvmCarrierConfigHelper {
   @Nullable
   public Set<String> getCarrierVvmPackageNames() {
     Assert.checkArgument(isValid());
-    Set<String> names = getCarrierVvmPackageNames(mOverrideConfig);
+    return getCarrierVvmPackageNamesWithoutValidation();
+  }
+
+  @Nullable
+  private Set<String> getCarrierVvmPackageNamesWithoutValidation() {
+    Set<String> names = getCarrierVvmPackageNames(overrideConfig);
     if (names != null) {
       return names;
     }
-    names = getCarrierVvmPackageNames(mCarrierConfig);
+    names = getCarrierVvmPackageNames(carrierConfig);
     if (names != null) {
       return names;
     }
-    return getCarrierVvmPackageNames(mTelephonyConfig);
+    return getCarrierVvmPackageNames(telephonyConfig);
   }
 
   private static Set<String> getCarrierVvmPackageNames(@Nullable PersistableBundle bundle) {
@@ -243,7 +255,7 @@ public class OmtpVvmCarrierConfigHelper {
     }
     for (String packageName : carrierPackages) {
       try {
-        mContext.getPackageManager().getPackageInfo(packageName, 0);
+        context.getPackageManager().getPackageInfo(packageName, 0);
         return false;
       } catch (NameNotFoundException e) {
         // Do nothing.
@@ -293,15 +305,15 @@ public class OmtpVvmCarrierConfigHelper {
   public Set<String> getDisabledCapabilities() {
     Assert.checkArgument(isValid());
     Set<String> disabledCapabilities;
-    disabledCapabilities = getDisabledCapabilities(mOverrideConfig);
+    disabledCapabilities = getDisabledCapabilities(overrideConfig);
     if (disabledCapabilities != null) {
       return disabledCapabilities;
     }
-    disabledCapabilities = getDisabledCapabilities(mCarrierConfig);
+    disabledCapabilities = getDisabledCapabilities(carrierConfig);
     if (disabledCapabilities != null) {
       return disabledCapabilities;
     }
-    return getDisabledCapabilities(mTelephonyConfig);
+    return getDisabledCapabilities(telephonyConfig);
   }
 
   @Nullable
@@ -355,7 +367,7 @@ public class OmtpVvmCarrierConfigHelper {
       return;
     }
 
-    if (mVvmType == null || mVvmType.isEmpty()) {
+    if (vvmType == null || vvmType.isEmpty()) {
       // The VVM type is invalid; we should never have gotten here in the first place since
       // this is loaded initially in the constructor, and callers should check isValid()
       // before trying to start activation anyways.
@@ -363,15 +375,15 @@ public class OmtpVvmCarrierConfigHelper {
       return;
     }
 
-    if (mProtocol != null) {
-      ActivationTask.start(mContext, mPhoneAccountHandle, null);
+    if (protocol != null) {
+      ActivationTask.start(context, this.phoneAccountHandle, null);
     }
   }
 
   public void activateSmsFilter() {
     Assert.checkArgument(isValid());
     TelephonyMangerCompat.setVisualVoicemailSmsFilterSettings(
-        mContext,
+        context,
         getPhoneAccountHandle(),
         new VisualVoicemailSmsFilterSettings.Builder().setClientPrefix(getClientPrefix()).build());
   }
@@ -382,18 +394,18 @@ public class OmtpVvmCarrierConfigHelper {
     if (!isLegacyModeEnabled()) {
       // SMS should still be filtered in legacy mode
       TelephonyMangerCompat.setVisualVoicemailSmsFilterSettings(
-          mContext, getPhoneAccountHandle(), null);
+          context, getPhoneAccountHandle(), null);
       VvmLog.i(TAG, "filter disabled");
     }
-    if (mProtocol != null) {
-      mProtocol.startDeactivation(this);
+    if (protocol != null) {
+      protocol.startDeactivation(this);
     }
-    VvmAccountManager.removeAccount(mContext, getPhoneAccountHandle());
+    VvmAccountManager.removeAccount(context, getPhoneAccountHandle());
   }
 
   public boolean supportsProvisioning() {
     Assert.checkArgument(isValid());
-    return mProtocol.supportsProvisioning();
+    return protocol.supportsProvisioning();
   }
 
   public void startProvisioning(
@@ -403,18 +415,18 @@ public class OmtpVvmCarrierConfigHelper {
       StatusMessage message,
       Bundle data) {
     Assert.checkArgument(isValid());
-    mProtocol.startProvisioning(task, phone, this, status, message, data);
+    protocol.startProvisioning(task, phone, this, status, message, data);
   }
 
   public void requestStatus(@Nullable PendingIntent sentIntent) {
     Assert.checkArgument(isValid());
-    mProtocol.requestStatus(this, sentIntent);
+    protocol.requestStatus(this, sentIntent);
   }
 
   public void handleEvent(VoicemailStatus.Editor status, OmtpEvents event) {
     Assert.checkArgument(isValid());
     VvmLog.i(TAG, "OmtpEvent:" + event);
-    mProtocol.handleEvent(mContext, this, status, event);
+    protocol.handleEvent(context, this, status, event);
   }
 
   @Override
@@ -422,11 +434,11 @@ public class OmtpVvmCarrierConfigHelper {
     StringBuilder builder = new StringBuilder("OmtpVvmCarrierConfigHelper [");
     builder
         .append("phoneAccountHandle: ")
-        .append(mPhoneAccountHandle)
+        .append(phoneAccountHandle)
         .append(", carrierConfig: ")
-        .append(mCarrierConfig != null)
+        .append(carrierConfig != null)
         .append(", telephonyConfig: ")
-        .append(mTelephonyConfig != null)
+        .append(telephonyConfig != null)
         .append(", type: ")
         .append(getVvmType())
         .append(", destinationNumber: ")
@@ -450,7 +462,7 @@ public class OmtpVvmCarrierConfigHelper {
   @Nullable
   private PersistableBundle getCarrierConfig(@NonNull TelephonyManager telephonyManager) {
     CarrierConfigManager carrierConfigManager =
-        (CarrierConfigManager) mContext.getSystemService(Context.CARRIER_CONFIG_SERVICE);
+        (CarrierConfigManager) context.getSystemService(Context.CARRIER_CONFIG_SERVICE);
     if (carrierConfigManager == null) {
       VvmLog.w(TAG, "No carrier config service found.");
       return null;
@@ -472,21 +484,21 @@ public class OmtpVvmCarrierConfigHelper {
   @Nullable
   private Object getValue(String key, Object defaultValue) {
     Object result;
-    if (mOverrideConfig != null) {
-      result = mOverrideConfig.get(key);
+    if (overrideConfig != null) {
+      result = overrideConfig.get(key);
       if (result != null) {
         return result;
       }
     }
 
-    if (mCarrierConfig != null) {
-      result = mCarrierConfig.get(key);
+    if (carrierConfig != null) {
+      result = carrierConfig.get(key);
       if (result != null) {
         return result;
       }
     }
-    if (mTelephonyConfig != null) {
-      result = mTelephonyConfig.get(key);
+    if (telephonyConfig != null) {
+      result = telephonyConfig.get(key);
       if (result != null) {
         return result;
       }
@@ -496,6 +508,30 @@ public class OmtpVvmCarrierConfigHelper {
 
   @VisibleForTesting
   public static void setOverrideConfigForTest(PersistableBundle config) {
-    sOverrideConfigForTest = config;
+    overrideConfigForTest = config;
+  }
+
+  private boolean isCarrierAppPreloaded() {
+    Set<String> carrierPackages = getCarrierVvmPackageNamesWithoutValidation();
+    if (carrierPackages == null) {
+      return false;
+    }
+    for (String packageName : carrierPackages) {
+      try {
+        ApplicationInfo info = getContext().getPackageManager().getApplicationInfo(packageName, 0);
+        if (!info.enabled) {
+          continue;
+        }
+        if ((info.flags & ApplicationInfo.FLAG_SYSTEM) != 0
+            || (info.flags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0) {
+          VvmLog.i(TAG, packageName + " preloaded, force disabling dialer vvm");
+          return true;
+        }
+
+      } catch (NameNotFoundException e) {
+        continue;
+      }
+    }
+    return false;
   }
 }

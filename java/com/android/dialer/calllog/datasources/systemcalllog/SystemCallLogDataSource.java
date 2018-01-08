@@ -27,7 +27,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.provider.CallLog;
 import android.provider.CallLog.Calls;
-import android.provider.ContactsContract.CommonDataKinds.Phone;
+import android.provider.VoicemailContract;
 import android.support.annotation.ColorInt;
 import android.support.annotation.MainThread;
 import android.support.annotation.Nullable;
@@ -35,6 +35,7 @@ import android.support.annotation.VisibleForTesting;
 import android.support.annotation.WorkerThread;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
+import android.telephony.PhoneNumberUtils;
 import android.text.TextUtils;
 import android.util.ArraySet;
 import com.android.dialer.DialerPhoneNumber;
@@ -45,11 +46,14 @@ import com.android.dialer.calllog.datasources.util.RowCombiner;
 import com.android.dialer.calllogutils.PhoneAccountUtils;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
+import com.android.dialer.common.concurrent.Annotations.BackgroundExecutor;
 import com.android.dialer.common.concurrent.ThreadUtil;
 import com.android.dialer.phonenumberproto.DialerPhoneNumberUtil;
 import com.android.dialer.storage.StorageComponent;
 import com.android.dialer.theme.R;
 import com.android.dialer.util.PermissionsUtil;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
 import java.util.Arrays;
 import java.util.List;
@@ -66,10 +70,14 @@ public class SystemCallLogDataSource implements CallLogDataSource {
   @VisibleForTesting
   static final String PREF_LAST_TIMESTAMP_PROCESSED = "systemCallLogLastTimestampProcessed";
 
+  private final ListeningExecutorService backgroundExecutorService;
+
   @Nullable private Long lastTimestampProcessed;
 
   @Inject
-  public SystemCallLogDataSource() {}
+  SystemCallLogDataSource(@BackgroundExecutor ListeningExecutorService backgroundExecutorService) {
+    this.backgroundExecutorService = backgroundExecutorService;
+  }
 
   @MainThread
   @Override
@@ -85,18 +93,40 @@ public class SystemCallLogDataSource implements CallLogDataSource {
     }
     // TODO(zachh): Need to somehow register observers if user enables permission after launch?
 
+    CallLogObserver callLogObserver =
+        new CallLogObserver(ThreadUtil.getUiThreadHandler(), appContext, contentObserverCallbacks);
+
     appContext
         .getContentResolver()
-        .registerContentObserver(
-            CallLog.Calls.CONTENT_URI_WITH_VOICEMAIL,
-            true,
-            new CallLogObserver(
-                ThreadUtil.getUiThreadHandler(), appContext, contentObserverCallbacks));
+        .registerContentObserver(CallLog.Calls.CONTENT_URI_WITH_VOICEMAIL, true, callLogObserver);
+
+    if (!PermissionsUtil.hasAddVoicemailPermissions(appContext)) {
+      LogUtil.i("SystemCallLogDataSource.registerContentObservers", "no add voicemail permissions");
+      return;
+    }
+    // TODO(uabdullah): Need to somehow register observers if user enables permission after launch?
+    appContext
+        .getContentResolver()
+        .registerContentObserver(VoicemailContract.Status.CONTENT_URI, true, callLogObserver);
+  }
+
+  @Override
+  public ListenableFuture<Boolean> isDirty(Context appContext) {
+    return backgroundExecutorService.submit(() -> isDirtyInternal(appContext));
+  }
+
+  @Override
+  public ListenableFuture<Void> fill(Context appContext, CallLogMutations mutations) {
+    return backgroundExecutorService.submit(() -> fillInternal(appContext, mutations));
+  }
+
+  @Override
+  public ListenableFuture<Void> onSuccessfulFill(Context appContext) {
+    return backgroundExecutorService.submit(() -> onSuccessfulFillInternal(appContext));
   }
 
   @WorkerThread
-  @Override
-  public boolean isDirty(Context appContext) {
+  private boolean isDirtyInternal(Context appContext) {
     Assert.isWorkerThread();
 
     /*
@@ -113,15 +143,14 @@ public class SystemCallLogDataSource implements CallLogDataSource {
   }
 
   @WorkerThread
-  @Override
-  public void fill(Context appContext, CallLogMutations mutations) {
+  private Void fillInternal(Context appContext, CallLogMutations mutations) {
     Assert.isWorkerThread();
 
     lastTimestampProcessed = null;
 
     if (!PermissionsUtil.hasPermission(appContext, permission.READ_CALL_LOG)) {
       LogUtil.i("SystemCallLogDataSource.fill", "no call log permissions");
-      return;
+      return null;
     }
 
     // This data source should always run first so the mutations should always be empty.
@@ -136,11 +165,11 @@ public class SystemCallLogDataSource implements CallLogDataSource {
 
     handleInsertsAndUpdates(appContext, mutations, annotatedCallLogIds);
     handleDeletes(appContext, annotatedCallLogIds, mutations);
+    return null;
   }
 
   @WorkerThread
-  @Override
-  public void onSuccessfulFill(Context appContext) {
+  private Void onSuccessfulFillInternal(Context appContext) {
     // If a fill operation was a no-op, lastTimestampProcessed could still be null.
     if (lastTimestampProcessed != null) {
       StorageComponent.get(appContext)
@@ -149,27 +178,21 @@ public class SystemCallLogDataSource implements CallLogDataSource {
           .putLong(PREF_LAST_TIMESTAMP_PROCESSED, lastTimestampProcessed)
           .apply();
     }
+    return null;
   }
 
   @Override
   public ContentValues coalesce(List<ContentValues> individualRowsSortedByTimestampDesc) {
-    // TODO(zachh): Complete implementation.
-
     assertNoVoicemailsInRows(individualRowsSortedByTimestampDesc);
 
     return new RowCombiner(individualRowsSortedByTimestampDesc)
         .useMostRecentLong(AnnotatedCallLog.TIMESTAMP)
         .useMostRecentLong(AnnotatedCallLog.NEW)
-        .useMostRecentString(AnnotatedCallLog.NUMBER_TYPE_LABEL)
-        .useMostRecentString(AnnotatedCallLog.NAME)
         // Two different DialerPhoneNumbers could be combined if they are different but considered
         // to be an "exact match" by libphonenumber; in this case we arbitrarily select the most
         // recent one.
         .useMostRecentBlob(AnnotatedCallLog.NUMBER)
         .useMostRecentString(AnnotatedCallLog.FORMATTED_NUMBER)
-        .useMostRecentString(AnnotatedCallLog.PHOTO_URI)
-        .useMostRecentLong(AnnotatedCallLog.PHOTO_ID)
-        .useMostRecentString(AnnotatedCallLog.LOOKUP_URI)
         .useMostRecentString(AnnotatedCallLog.GEOCODED_LOCATION)
         .useSingleValueString(AnnotatedCallLog.PHONE_ACCOUNT_COMPONENT_NAME)
         .useSingleValueString(AnnotatedCallLog.PHONE_ACCOUNT_ID)
@@ -212,14 +235,8 @@ public class SystemCallLogDataSource implements CallLogDataSource {
                   Calls.NUMBER,
                   Calls.TYPE,
                   Calls.COUNTRY_ISO,
-                  Calls.CACHED_NAME,
-                  Calls.CACHED_FORMATTED_NUMBER,
-                  Calls.CACHED_PHOTO_URI,
-                  Calls.CACHED_PHOTO_ID,
-                  Calls.CACHED_LOOKUP_URI,
-                  Calls.CACHED_NUMBER_TYPE,
-                  Calls.CACHED_NUMBER_LABEL,
                   Calls.DURATION,
+                  Calls.DATA_USAGE,
                   Calls.TRANSCRIPTION,
                   Calls.VOICEMAIL_URI,
                   Calls.IS_READ,
@@ -250,15 +267,8 @@ public class SystemCallLogDataSource implements CallLogDataSource {
         int numberColumn = cursor.getColumnIndexOrThrow(Calls.NUMBER);
         int typeColumn = cursor.getColumnIndexOrThrow(Calls.TYPE);
         int countryIsoColumn = cursor.getColumnIndexOrThrow(Calls.COUNTRY_ISO);
-        int cachedNameColumn = cursor.getColumnIndexOrThrow(Calls.CACHED_NAME);
-        int cachedFormattedNumberColumn =
-            cursor.getColumnIndexOrThrow(Calls.CACHED_FORMATTED_NUMBER);
-        int cachedPhotoUriColumn = cursor.getColumnIndexOrThrow(Calls.CACHED_PHOTO_URI);
-        int cachedPhotoIdColumn = cursor.getColumnIndexOrThrow(Calls.CACHED_PHOTO_ID);
-        int cachedLookupUriColumn = cursor.getColumnIndexOrThrow(Calls.CACHED_LOOKUP_URI);
-        int cachedNumberTypeColumn = cursor.getColumnIndexOrThrow(Calls.CACHED_NUMBER_TYPE);
-        int cachedNumberLabelColumn = cursor.getColumnIndexOrThrow(Calls.CACHED_NUMBER_LABEL);
         int durationsColumn = cursor.getColumnIndexOrThrow(Calls.DURATION);
+        int dataUsageColumn = cursor.getColumnIndexOrThrow(Calls.DATA_USAGE);
         int transcriptionColumn = cursor.getColumnIndexOrThrow(Calls.TRANSCRIPTION);
         int voicemailUriColumn = cursor.getColumnIndexOrThrow(Calls.VOICEMAIL_URI);
         int isReadColumn = cursor.getColumnIndexOrThrow(Calls.IS_READ);
@@ -278,14 +288,8 @@ public class SystemCallLogDataSource implements CallLogDataSource {
           String numberAsStr = cursor.getString(numberColumn);
           long type = cursor.getInt(typeColumn);
           String countryIso = cursor.getString(countryIsoColumn);
-          String cachedName = cursor.getString(cachedNameColumn);
-          String formattedNumber = cursor.getString(cachedFormattedNumberColumn);
-          String cachedPhotoUri = cursor.getString(cachedPhotoUriColumn);
-          long cachedPhotoId = cursor.getLong(cachedPhotoIdColumn);
-          String cachedLookupUri = cursor.getString(cachedLookupUriColumn);
-          int cachedNumberType = cursor.getInt(cachedNumberTypeColumn);
-          String cachedNumberLabel = cursor.getString(cachedNumberLabelColumn);
           int duration = cursor.getInt(durationsColumn);
+          int dataUsage = cursor.getInt(dataUsageColumn);
           String transcription = cursor.getString(transcriptionColumn);
           String voicemailUri = cursor.getString(voicemailUriColumn);
           int isRead = cursor.getInt(isReadColumn);
@@ -299,31 +303,19 @@ public class SystemCallLogDataSource implements CallLogDataSource {
           contentValues.put(AnnotatedCallLog.TIMESTAMP, date);
 
           if (!TextUtils.isEmpty(numberAsStr)) {
-            byte[] numberAsProtoBytes =
-                dialerPhoneNumberUtil.parse(numberAsStr, countryIso).toByteArray();
+            DialerPhoneNumber dialerPhoneNumber =
+                dialerPhoneNumberUtil.parse(numberAsStr, countryIso);
+
+            contentValues.put(AnnotatedCallLog.NUMBER, dialerPhoneNumber.toByteArray());
+            contentValues.put(
+                AnnotatedCallLog.FORMATTED_NUMBER,
+                PhoneNumberUtils.formatNumber(numberAsStr, countryIso));
             // TODO(zachh): Need to handle post-dial digits; different on N and M.
-            contentValues.put(AnnotatedCallLog.NUMBER, numberAsProtoBytes);
           } else {
             contentValues.put(
                 AnnotatedCallLog.NUMBER, DialerPhoneNumber.getDefaultInstance().toByteArray());
           }
-
           contentValues.put(AnnotatedCallLog.CALL_TYPE, type);
-          contentValues.put(AnnotatedCallLog.NAME, cachedName);
-          // TODO(zachh): Format the number using DialerPhoneNumberUtil here.
-          contentValues.put(AnnotatedCallLog.FORMATTED_NUMBER, formattedNumber);
-          contentValues.put(AnnotatedCallLog.PHOTO_URI, cachedPhotoUri);
-          contentValues.put(AnnotatedCallLog.PHOTO_ID, cachedPhotoId);
-          contentValues.put(AnnotatedCallLog.LOOKUP_URI, cachedLookupUri);
-
-          // Phone.getTypeLabel returns "Custom" if given (0, null) which is not of any use. Just
-          // omit setting the label if there's no information for it.
-          if (cachedNumberType != 0 || cachedNumberLabel != null) {
-            contentValues.put(
-                AnnotatedCallLog.NUMBER_TYPE_LABEL,
-                Phone.getTypeLabel(appContext.getResources(), cachedNumberType, cachedNumberLabel)
-                    .toString());
-          }
           contentValues.put(AnnotatedCallLog.IS_READ, isRead);
           contentValues.put(AnnotatedCallLog.NEW, isNew);
           contentValues.put(AnnotatedCallLog.GEOCODED_LOCATION, geocodedLocation);
@@ -334,6 +326,7 @@ public class SystemCallLogDataSource implements CallLogDataSource {
               appContext, contentValues, phoneAccountComponentName, phoneAccountId);
           contentValues.put(AnnotatedCallLog.FEATURES, features);
           contentValues.put(AnnotatedCallLog.DURATION, duration);
+          contentValues.put(AnnotatedCallLog.DATA_USAGE, dataUsage);
           contentValues.put(AnnotatedCallLog.TRANSCRIPTION, transcription);
           contentValues.put(AnnotatedCallLog.VOICEMAIL_URI, voicemailUri);
 
@@ -478,7 +471,11 @@ public class SystemCallLogDataSource implements CallLogDataSource {
     @Override
     public void onChange(boolean selfChange, Uri uri) {
       Assert.isMainThread();
-      LogUtil.enterBlock("SystemCallLogDataSource.CallLogObserver.onChange");
+      LogUtil.i(
+          "SystemCallLogDataSource.CallLogObserver.onChange",
+          "Uri:%s, SelfChange:%b",
+          String.valueOf(uri),
+          selfChange);
       super.onChange(selfChange, uri);
 
       /*

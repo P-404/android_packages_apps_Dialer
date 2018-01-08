@@ -17,8 +17,10 @@
 package com.android.dialer.widget;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.res.ColorStateList;
 import android.content.res.Resources;
-import android.graphics.drawable.Drawable;
+import android.support.annotation.DrawableRes;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.FloatingActionButton.OnVisibilityChangedListener;
 import android.view.View;
@@ -34,23 +36,24 @@ public class FloatingActionButtonController {
   public static final int ALIGN_QUARTER_END = 1;
   public static final int ALIGN_END = 2;
 
-  private final int mAnimationDuration;
-  private final int mFloatingActionButtonWidth;
-  private final int mFloatingActionButtonMarginRight;
-  private final FloatingActionButton mFab;
-  private final Interpolator mFabInterpolator;
-  private int mScreenWidth;
+  private final int animationDuration;
+  private final int floatingActionButtonWidth;
+  private final int floatingActionButtonMarginRight;
+  private final FloatingActionButton fab;
+  private final Interpolator fabInterpolator;
+  private int fabIconId = -1;
+  private int screenWidth;
 
   public FloatingActionButtonController(Activity activity, FloatingActionButton fab) {
     Resources resources = activity.getResources();
-    mFabInterpolator =
+    fabInterpolator =
         AnimationUtils.loadInterpolator(activity, android.R.interpolator.fast_out_slow_in);
-    mFloatingActionButtonWidth =
+    floatingActionButtonWidth =
         resources.getDimensionPixelSize(R.dimen.floating_action_button_width);
-    mFloatingActionButtonMarginRight =
+    floatingActionButtonMarginRight =
         resources.getDimensionPixelOffset(R.dimen.floating_action_button_margin_right);
-    mAnimationDuration = resources.getInteger(R.integer.floating_action_button_animation_duration);
-    mFab = fab;
+    animationDuration = resources.getInteger(R.integer.floating_action_button_animation_duration);
+    this.fab = fab;
   }
 
   /**
@@ -60,12 +63,12 @@ public class FloatingActionButtonController {
    * @param screenWidth The width of the screen in pixels.
    */
   public void setScreenWidth(int screenWidth) {
-    mScreenWidth = screenWidth;
+    this.screenWidth = screenWidth;
   }
 
   /** @see FloatingActionButton#isShown() */
   public boolean isVisible() {
-    return mFab.isShown();
+    return fab.isShown();
   }
 
   /**
@@ -82,10 +85,15 @@ public class FloatingActionButtonController {
     }
   }
 
-  public void changeIcon(Drawable icon, String description) {
-    if (mFab.getDrawable() != icon || !mFab.getContentDescription().equals(description)) {
-      mFab.setImageDrawable(icon);
-      mFab.setContentDescription(description);
+  public void changeIcon(Context context, @DrawableRes int iconId, String description) {
+    if (this.fabIconId != iconId) {
+      fab.setImageResource(iconId);
+      fab.setImageTintList(
+          ColorStateList.valueOf(context.getResources().getColor(android.R.color.white)));
+      this.fabIconId = iconId;
+    }
+    if (!fab.getContentDescription().equals(description)) {
+      fab.setContentDescription(description);
     }
   }
 
@@ -97,7 +105,7 @@ public class FloatingActionButtonController {
   public void onPageScrolled(float positionOffset) {
     // As the page is scrolling, if we're on the first tab, update the FAB position so it
     // moves along with it.
-    mFab.setTranslationX(positionOffset * getTranslationXForAlignment(ALIGN_END));
+    fab.setTranslationX(positionOffset * getTranslationXForAlignment(ALIGN_END));
   }
 
   /**
@@ -119,38 +127,38 @@ public class FloatingActionButtonController {
    * @param animate Whether or not to animate the transition.
    */
   private void align(int align, int offsetX, int offsetY, boolean animate) {
-    if (mScreenWidth == 0) {
+    if (screenWidth == 0) {
       return;
     }
 
     int translationX = getTranslationXForAlignment(align);
 
     // Skip animation if container is not shown; animation causes container to show again.
-    if (animate && mFab.isShown()) {
-      mFab.animate()
+    if (animate && fab.isShown()) {
+      fab.animate()
           .translationX(translationX + offsetX)
           .translationY(offsetY)
-          .setInterpolator(mFabInterpolator)
-          .setDuration(mAnimationDuration)
+          .setInterpolator(fabInterpolator)
+          .setDuration(animationDuration)
           .start();
     } else {
-      mFab.setTranslationX(translationX + offsetX);
-      mFab.setTranslationY(offsetY);
+      fab.setTranslationX(translationX + offsetX);
+      fab.setTranslationY(offsetY);
     }
   }
 
   /** @see FloatingActionButton#show() */
   public void scaleIn() {
-    mFab.show();
+    fab.show();
   }
 
   /** @see FloatingActionButton#hide() */
   public void scaleOut() {
-    mFab.hide();
+    fab.hide();
   }
 
   public void scaleOut(OnVisibilityChangedListener listener) {
-    mFab.hide(listener);
+    fab.hide(listener);
   }
 
   /**
@@ -168,12 +176,11 @@ public class FloatingActionButtonController {
         return 0;
       case ALIGN_QUARTER_END:
         // Moves the FAB a quarter of the screen width.
-        result = mScreenWidth / 4;
+        result = screenWidth / 4;
         break;
       case ALIGN_END:
         // Moves the FAB half the screen width. Same as aligning right with a marginRight.
-        result =
-            mScreenWidth / 2 - mFloatingActionButtonWidth / 2 - mFloatingActionButtonMarginRight;
+        result = screenWidth / 2 - floatingActionButtonWidth / 2 - floatingActionButtonMarginRight;
         break;
       default:
         throw Assert.createIllegalStateFailException("Invalid alignment value: " + align);
@@ -185,6 +192,6 @@ public class FloatingActionButtonController {
   }
 
   private boolean isLayoutRtl() {
-    return mFab.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+    return fab.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
   }
 }

@@ -12,6 +12,7 @@ message DialerImpression {
   // Event enums to be used for Impression Logging in Dialer.
   // It's perfectly acceptable for this enum to be large
   // Values should be from 1000 to 100000.
+  // Next Tag: 1320
   enum Type {
     UNKNOWN_AOSP_EVENT_TYPE = 1000;
 
@@ -121,11 +122,15 @@ message DialerImpression {
 
     // From the service instead of an activity logs the number of times the
     // number was marked as Spam by the user (e.g from the feedback prompt)
-    SPAM_NOTIFICATION_SERVICE_ACTION_MARK_NUMBER_AS_SPAM = 1026;
+    SPAM_NOTIFICATION_SERVICE_ACTION_MARK_NUMBER_AS_SPAM = 1026
+
+        ;
 
     // From the service instead of an activity logs the number of times the
     // number was marked as Not Spam by the user (e.g from the feedback prompt)
-    SPAM_NOTIFICATION_SERVICE_ACTION_MARK_NUMBER_AS_NOT_SPAM = 1027;
+    SPAM_NOTIFICATION_SERVICE_ACTION_MARK_NUMBER_AS_NOT_SPAM = 1027
+
+        ;
 
     // User is in a active call i.e either incoming or outgoing
     // This is mainly so we can assign an impression event to a call event i.e
@@ -143,13 +148,17 @@ message DialerImpression {
     INCOMING_NON_SPAM_CALL = 1030;
 
     // Spam notifications shown despite throttling
-    SPAM_NOTIFICATION_SHOWN_AFTER_THROTTLE = 1041;
+    SPAM_NOTIFICATION_SHOWN_AFTER_THROTTLE = 1041
+
+        ;
 
     // Spam notifications not shown due to throttling
     SPAM_NOTIFICATION_NOT_SHOWN_AFTER_THROTTLE = 1042;
 
     // Non spam notifications shown despite throttling
-    NON_SPAM_NOTIFICATION_SHOWN_AFTER_THROTTLE = 1043;
+    NON_SPAM_NOTIFICATION_SHOWN_AFTER_THROTTLE = 1043
+
+        ;
 
     // Non spam notifications not shown due to throttling
     NON_SPAM_NOTIFICATION_NOT_SHOWN_AFTER_THROTTLE = 1044;
@@ -581,5 +590,59 @@ message DialerImpression {
     // Indicates that the number attempting to be assisted dialed had an
     // extension.
     ASSISTED_DIALING_CONSTRAINT_NUMBER_HAS_EXTENSION = 1289;
+    // Indicates that the user disabled the feature.
+    ASSISTED_DIALING_FEATURE_DISABLED_BY_USER = 1292;
+
+    // User reports a same prefix call as spam from call history
+    REPORT_SAME_PREFIX_CALL_AS_SPAM_VIA_CALL_HISTORY =
+        1290
+
+        ;
+
+    // User reports a same prefix call as not spam from call history
+    REPORT_SAME_PREFIX_CALL_AS_NOT_SPAM_VIA_CALL_HISTORY =
+        1291
+
+        ;
+
+    PRECALL_INITIATED = 1293;
+    PRECALL_INITIATED_EXTERNAL = 1294;
+    PRECALL_CANCELED = 1295;
+
+    DUAL_SIM_CHANGE_SIM_PRESSED = 1296;
+    DUAL_SIM_SELECTION_SHOWN = 1297;
+    DUAL_SIM_SELECTION_VOICEMAIL = 1298;
+    DUAL_SIM_SELECTION_IN_CONTACTS = 1299;
+    DUAL_SIM_SELECTION_SUGGESTION_AVAILABLE = 1300;
+    DUAL_SIM_SELECTION_SUGGESTED_CARRIER = 1301;
+    DUAL_SIM_SELECTION_SUGGESTED_FREQUENCY = 1302;
+    DUAL_SIM_SELECTION_SUGGESTED_SIM_SELECTED = 1303;
+    DUAL_SIM_SELECTION_NON_SUGGESTED_SIM_SELECTED = 1304;
+    DUAL_SIM_SELECTION_PREFERRED_SET = 1305;
+    DUAL_SIM_SELECTION_PREFERRED_USED = 1306;
+    DUAL_SIM_SELECTION_GLOBAL_USED = 1307;
+
+    DUO_CALL_LOG_SET_UP_INSTALL = 1308;
+    DUO_CALL_LOG_SET_UP_ACTIVATE = 1309;
+    DUO_CALL_LOG_INVITE = 1310;
+
+    // Bubble primary button first click to expand bubble
+    BUBBLE_V2_CLICK_TO_EXPAND = 1311;
+    // Bubble primary button second click to collapse bubble
+    BUBBLE_V2_CLICK_TO_COLLAPSE = 1312;
+    // User return to call from bubble call action menu
+    BUBBLE_V2_RETURN_TO_CALL = 1313;
+    // User muted call from bubble call action menu
+    BUBBLE_V2_MUTE_CALL = 1314;
+    // User unmuted call from bubble call action menu
+    BUBBLE_V2_UNMUTE_CALL = 1315;
+    // User choose audio route speakerphone from bubble call action menu
+    BUBBLE_V2_SPEAKERPHONE = 1316;
+    // User choose audio route wired or earpiece from bubble call action menu
+    BUBBLE_V2_WIRED_OR_EARPIECE = 1317;
+    // User choose audio route bluetooth from bubble call action menu
+    BUBBLE_V2_BLUETOOTH = 1318;
+    // User ended call from bubble call action menu
+    BUBBLE_V2_END_CALL = 1319;
   }
 }

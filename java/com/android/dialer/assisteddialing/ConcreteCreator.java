@@ -22,9 +22,9 @@ import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
+import android.support.annotation.VisibleForTesting;
 import android.support.v4.os.UserManagerCompat;
 import android.telephony.TelephonyManager;
-import com.android.dialer.assisteddialing.ui.R;
 import com.android.dialer.common.LogUtil;
 import com.android.dialer.configprovider.ConfigProvider;
 import com.android.dialer.configprovider.ConfigProviderBindings;
@@ -39,9 +39,9 @@ import com.android.dialer.configprovider.ConfigProviderBindings;
 public final class ConcreteCreator {
 
   // Floor set at N due to use of Optional.
-  protected static final int BUILD_CODE_FLOOR = Build.VERSION_CODES.N;
-  // Ceiling set at O because this feature will ship as part of the framework in P.
-  protected static final int BUILD_CODE_CEILING = Build.VERSION_CODES.O;
+  @VisibleForTesting public static final int BUILD_CODE_FLOOR = Build.VERSION_CODES.N;
+  // Ceiling set at O_MR1 because this feature will ship as part of the framework in P.
+  @VisibleForTesting public static final int BUILD_CODE_CEILING = Build.VERSION_CODES.O_MR1;
 
   /**
    * Creates a new AssistedDialingMediator
@@ -85,9 +85,7 @@ public final class ConcreteCreator {
       return new AssistedDialingMediatorStub();
     }
 
-    Constraints constraints =
-        new Constraints(
-            context, configProvider.getString("assisted_dialing_csv_country_codes", ""));
+    Constraints constraints = new Constraints(context, getCountryCodeProvider(configProvider));
     return new AssistedDialingMediatorImpl(
         new LocationDetector(
             telephonyManager,
@@ -106,5 +104,17 @@ public final class ConcreteCreator {
     return (Build.VERSION.SDK_INT >= BUILD_CODE_FLOOR
             && Build.VERSION.SDK_INT <= BUILD_CODE_CEILING)
         && configProvider.getBoolean("assisted_dialing_enabled", false);
+  }
+
+  /**
+   * Returns a CountryCodeProvider responsible for providing countries eligible for assisted Dialing
+   */
+  public static CountryCodeProvider getCountryCodeProvider(ConfigProvider configProvider) {
+    if (configProvider == null) {
+      LogUtil.i("ConcreteCreator.getCountryCodeProvider", "provided configProvider was null");
+      throw new NullPointerException("Provided configProvider was null");
+    }
+
+    return new CountryCodeProvider(configProvider);
   }
 }

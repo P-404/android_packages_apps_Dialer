@@ -61,18 +61,18 @@ public class ActivationTask extends BaseTask {
   private static final int RETRY_TIMES = 4;
   private static final int RETRY_INTERVAL_MILLIS = 5_000;
 
-  private static final String EXTRA_MESSAGE_DATA_BUNDLE = "extra_message_data_bundle";
+  @VisibleForTesting static final String EXTRA_MESSAGE_DATA_BUNDLE = "extra_message_data_bundle";
 
-  private final RetryPolicy mRetryPolicy;
+  private final RetryPolicy retryPolicy;
 
   @Nullable private OmtpVvmCarrierConfigHelper configForTest;
 
-  private Bundle mMessageData;
+  private Bundle messageData;
 
   public ActivationTask() {
     super(TASK_ACTIVATION);
-    mRetryPolicy = new RetryPolicy(RETRY_TIMES, RETRY_INTERVAL_MILLIS);
-    addPolicy(mRetryPolicy);
+    retryPolicy = new RetryPolicy(RETRY_TIMES, RETRY_INTERVAL_MILLIS);
+    addPolicy(retryPolicy);
   }
 
   /** Has the user gone through the setup wizard yet. */
@@ -108,7 +108,7 @@ public class ActivationTask extends BaseTask {
   @Override
   public void onCreate(Context context, Bundle extras) {
     super.onCreate(context, extras);
-    mMessageData = extras.getParcelable(EXTRA_MESSAGE_DATA_BUNDLE);
+    messageData = extras.getParcelable(EXTRA_MESSAGE_DATA_BUNDLE);
   }
 
   @Override
@@ -168,7 +168,8 @@ public class ActivationTask extends BaseTask {
     }
     VvmLog.i(TAG, "VVM content provider configured - " + helper.getVvmType());
 
-    if (VvmAccountManager.isAccountActivated(getContext(), phoneAccountHandle)) {
+    if (messageData == null
+        && VvmAccountManager.isAccountActivated(getContext(), phoneAccountHandle)) {
       VvmLog.i(TAG, "Account is already activated");
       // The activated state might come from restored data, the filter still needs to be set up.
       helper.activateSmsFilter();
@@ -190,15 +191,15 @@ public class ActivationTask extends BaseTask {
     }
 
     helper.activateSmsFilter();
-    VoicemailStatus.Editor status = mRetryPolicy.getVoicemailStatusEditor();
+    VoicemailStatus.Editor status = retryPolicy.getVoicemailStatusEditor();
 
     VisualVoicemailProtocol protocol = helper.getProtocol();
 
     Bundle data;
-    if (mMessageData != null) {
+    if (messageData != null) {
       // The content of STATUS SMS is provided to launch this task, no need to request it
       // again.
-      data = mMessageData;
+      data = messageData;
     } else {
       try (StatusSmsFetcher fetcher = new StatusSmsFetcher(getContext(), phoneAccountHandle)) {
         protocol.startActivation(helper, fetcher.getSentIntent());

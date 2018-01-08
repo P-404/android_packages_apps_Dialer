@@ -42,10 +42,9 @@ public class AnnotatedCallLogContract {
     String TIMESTAMP = "timestamp";
 
     /**
-     * Copied from {@link android.provider.CallLog.Calls#CACHED_NAME}.
-     *
-     * <p>This is exactly how it should appear to the user. If the user's locale or name display
-     * preferences change, this column should be rewritten.
+     * The name (which may be a person's name or business name, but not a number) formatted exactly
+     * as it should appear to the user. If the user's locale or name display preferences change,
+     * this column should be rewritten.
      *
      * <p>Type: TEXT
      */
@@ -61,28 +60,29 @@ public class AnnotatedCallLogContract {
     String NUMBER = "number";
 
     /**
-     * Copied from {@link android.provider.CallLog.Calls#CACHED_FORMATTED_NUMBER}.
+     * The number formatted as it should be displayed to the user. Note that it may not always be
+     * displayed, for example if the number has a corresponding person or business name.
      *
      * <p>Type: TEXT
      */
     String FORMATTED_NUMBER = "formatted_number";
 
     /**
-     * Copied from {@link android.provider.CallLog.Calls#CACHED_PHOTO_URI}.
+     * A photo URI for the contact to display in the call log list view.
      *
      * <p>TYPE: TEXT
      */
     String PHOTO_URI = "photo_uri";
 
     /**
-     * Copied from {@link android.provider.CallLog.Calls#CACHED_PHOTO_ID}.
+     * A photo ID (from the contacts provider) for the contact to display in the call log list view.
      *
      * <p>Type: INTEGER (long)
      */
     String PHOTO_ID = "photo_id";
 
     /**
-     * Copied from {@link android.provider.CallLog.Calls#CACHED_LOOKUP_URI}.
+     * The contacts provider lookup URI for the contact associated with the call.
      *
      * <p>TYPE: TEXT
      */
@@ -211,18 +211,30 @@ public class AnnotatedCallLogContract {
   public static final class AnnotatedCallLog implements CommonColumns {
 
     public static final String TABLE = "AnnotatedCallLog";
+    public static final String DISTINCT_PHONE_NUMBERS = "DistinctPhoneNumbers";
 
     /** The content URI for this table. */
     public static final Uri CONTENT_URI =
         Uri.withAppendedPath(AnnotatedCallLogContract.CONTENT_URI, TABLE);
 
+    /** Content URI for selecting the distinct phone numbers from the AnnotatedCallLog. */
+    public static final Uri DISTINCT_NUMBERS_CONTENT_URI =
+        Uri.withAppendedPath(AnnotatedCallLogContract.CONTENT_URI, DISTINCT_PHONE_NUMBERS);
+
     /** The MIME type of a {@link android.content.ContentProvider#getType(Uri)} single entry. */
     public static final String CONTENT_ITEM_TYPE = "vnd.android.cursor.item/annotated_call_log";
 
     /**
+     * See {@link android.provider.CallLog.Calls#DATA_USAGE}.
+     *
+     * <p>Type: INTEGER (long)
+     */
+    public static final String DATA_USAGE = "data_usage";
+
+    /**
      * See {@link android.provider.CallLog.Calls#DURATION}.
      *
-     * <p>TYPE: INTEGER (int)
+     * <p>TYPE: INTEGER (long)
      */
     public static final String DURATION = "duration";
 
@@ -262,17 +274,18 @@ public class AnnotatedCallLogContract {
         "vnd.android.cursor.item/coalesced_annotated_call_log";
 
     /**
-     * Number of AnnotatedCallLog rows represented by this CoalescedAnnotatedCallLog row.
+     * IDs of rows in {@link AnnotatedCallLog} that are coalesced into one row in {@link
+     * CoalescedAnnotatedCallLog}, encoded as a {@link com.android.dialer.CoalescedIds} proto.
      *
-     * <p>Type: INTEGER
+     * <p>Type: BLOB
      */
-    public static final String NUMBER_CALLS = "number_calls";
+    public static final String COALESCED_IDS = "coalesced_ids";
 
     /**
      * Columns that are only in the {@link CoalescedAnnotatedCallLog} but not the {@link
      * AnnotatedCallLog}.
      */
-    private static final String[] COLUMNS_ONLY_IN_COALESCED_CALL_LOG = new String[] {NUMBER_CALLS};
+    private static final String[] COLUMNS_ONLY_IN_COALESCED_CALL_LOG = new String[] {COALESCED_IDS};
 
     /** All columns in the {@link CoalescedAnnotatedCallLog}. */
     public static final String[] ALL_COLUMNS =

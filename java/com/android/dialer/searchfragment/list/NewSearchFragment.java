@@ -32,7 +32,7 @@ import android.support.annotation.VisibleForTesting;
 import android.support.v13.app.FragmentCompat;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
-import android.telephony.TelephonyManager;
+import android.telephony.PhoneNumberUtils;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -44,7 +44,6 @@ import android.widget.FrameLayout;
 import android.widget.FrameLayout.LayoutParams;
 import com.android.contacts.common.extensions.PhoneDirectoryExtenderAccessor;
 import com.android.dialer.animation.AnimUtils;
-import com.android.dialer.assisteddialing.ConcreteCreator;
 import com.android.dialer.callcomposer.CallComposerActivity;
 import com.android.dialer.callintent.CallInitiationType;
 import com.android.dialer.callintent.CallIntentBuilder;
@@ -60,6 +59,7 @@ import com.android.dialer.enrichedcall.EnrichedCallComponent;
 import com.android.dialer.enrichedcall.EnrichedCallManager.CapabilitiesListener;
 import com.android.dialer.logging.DialerImpression;
 import com.android.dialer.logging.Logger;
+import com.android.dialer.precall.PreCall;
 import com.android.dialer.searchfragment.common.RowClickListener;
 import com.android.dialer.searchfragment.common.SearchCursor;
 import com.android.dialer.searchfragment.cp2.SearchContactsCursorLoader;
@@ -113,10 +113,15 @@ public final class NewSearchFragment extends Fragment
   private RecyclerView recyclerView;
   private SearchAdapter adapter;
   private String query;
+  // Raw query number from dialpad, which may contain special character such as "+". This is used
+  // for actions to add contact or send sms.
+  private String rawNumber;
   private CallInitiationType.Type callInitiationType = CallInitiationType.Type.UNKNOWN_INITIATION;
   private boolean remoteDirectoriesDisabledForTesting;
 
   private final List<Directory> directories = new ArrayList<>();
+  private final Runnable loaderCp2ContactsRunnable =
+      () -> getLoaderManager().restartLoader(CONTACTS_LOADER_ID, null, this);
   private final Runnable loadNearbyPlacesRunnable =
       () -> getLoaderManager().restartLoader(NEARBY_PLACES_LOADER_ID, null, this);
   private final Runnable loadRemoteContactsRunnable =
@@ -139,7 +144,7 @@ public final class NewSearchFragment extends Fragment
       LayoutInflater inflater, @Nullable ViewGroup parent, @Nullable Bundle savedInstanceState) {
     View view = inflater.inflate(R.layout.fragment_search, parent, false);
     adapter = new SearchAdapter(getContext(), new SearchCursorManager(), this);
-    adapter.setQuery(query);
+    adapter.setQuery(query, rawNumber, callInitiationType);
     adapter.setSearchActions(getActions());
     adapter.setZeroSuggestVisible(getArguments().getBoolean(KEY_SHOW_ZERO_SUGGEST));
     emptyContentView = view.findViewById(R.id.empty_view);
@@ -186,7 +191,7 @@ public final class NewSearchFragment extends Fragment
   public Loader<Cursor> onCreateLoader(int id, Bundle bundle) {
     LogUtil.i("NewSearchFragment.onCreateLoader", "loading cursor: " + id);
     if (id == CONTACTS_LOADER_ID) {
-      return new SearchContactsCursorLoader(getContext(), query);
+      return new SearchContactsCursorLoader(getContext(), query, isRegularSearch());
     } else if (id == NEARBY_PLACES_LOADER_ID) {
       // Directories represent contact data sources on the device, but since nearby places aren't
       // stored on the device, they don't have a directory ID. We pass the list of all existing IDs
@@ -249,13 +254,18 @@ public final class NewSearchFragment extends Fragment
     }
   }
 
+  public void setRawNumber(String rawNumber) {
+    this.rawNumber = rawNumber;
+  }
+
   public void setQuery(String query, CallInitiationType.Type callInitiationType) {
     this.query = query;
     this.callInitiationType = callInitiationType;
     if (adapter != null) {
-      adapter.setQuery(query);
+      adapter.setQuery(query, rawNumber, callInitiationType);
       adapter.setSearchActions(getActions());
       adapter.setZeroSuggestVisible(isRegularSearch());
+      loadCp2ContactsCursor();
       loadNearbyPlacesCursor();
       loadRemoteContactsCursors();
     }
@@ -297,6 +307,7 @@ public final class NewSearchFragment extends Fragment
   @Override
   public void onDestroy() {
     super.onDestroy();
+    ThreadUtil.getUiThreadHandler().removeCallbacks(loaderCp2ContactsRunnable);
     ThreadUtil.getUiThreadHandler().removeCallbacks(loadNearbyPlacesRunnable);
     ThreadUtil.getUiThreadHandler().removeCallbacks(loadRemoteContactsRunnable);
     ThreadUtil.getUiThreadHandler().removeCallbacks(capabilitiesUpdatedRunnable);
@@ -353,6 +364,13 @@ public final class NewSearchFragment extends Fragment
         .postDelayed(loadRemoteContactsRunnable, NETWORK_SEARCH_DELAY_MILLIS);
   }
 
+  private void loadCp2ContactsCursor() {
+    // Cancel existing load if one exists.
+    ThreadUtil.getUiThreadHandler().removeCallbacks(loaderCp2ContactsRunnable);
+    ThreadUtil.getUiThreadHandler()
+        .postDelayed(loaderCp2ContactsRunnable, NETWORK_SEARCH_DELAY_MILLIS);
+  }
+
   // Should not be called before remote directories (not contacts) have finished loading.
   private void loadNearbyPlacesCursor() {
     if (!PermissionsUtil.hasLocationPermissions(getContext())
@@ -406,6 +424,7 @@ public final class NewSearchFragment extends Fragment
     EnrichedCallComponent.get(getContext())
         .getEnrichedCallManager()
         .registerCapabilitiesListener(this);
+    getLoaderManager().restartLoader(CONTACTS_LOADER_ID, null, this);
   }
 
   @Override
@@ -438,17 +457,27 @@ public final class NewSearchFragment extends Fragment
    * the list of supported actions, see {@link SearchActionViewHolder.Action}.
    */
   private List<Integer> getActions() {
-    if (TextUtils.isEmpty(query) || query.length() == 1 || isRegularSearch()) {
+    boolean isDialableNumber = PhoneNumberUtils.isGlobalPhoneNumber(query);
+    boolean nonDialableQueryInRegularSearch = isRegularSearch() && !isDialableNumber;
+    if (TextUtils.isEmpty(query) || query.length() == 1 || nonDialableQueryInRegularSearch) {
       return Collections.emptyList();
     }
 
     List<Integer> actions = new ArrayList<>();
-    actions.add(Action.CREATE_NEW_CONTACT);
-    actions.add(Action.ADD_TO_CONTACT);
+    if (!isRegularSearch()) {
+      actions.add(Action.CREATE_NEW_CONTACT);
+      actions.add(Action.ADD_TO_CONTACT);
+    }
+
+    if (isRegularSearch() && isDialableNumber) {
+      actions.add(Action.MAKE_VOICE_CALL);
+    }
+
     actions.add(Action.SEND_SMS);
     if (CallUtil.isVideoEnabled(getContext())) {
       actions.add(Action.MAKE_VILTE_CALL);
     }
+
     return actions;
   }
 
@@ -485,17 +514,12 @@ public final class NewSearchFragment extends Fragment
             .setCharactersInSearchString(query == null ? 0 : query.length())
             .setAllowAssistedDialing(allowAssistedDial)
             .build();
-    Intent intent =
+    PreCall.start(
+        getContext(),
         new CallIntentBuilder(phoneNumber, callSpecificAppData)
             .setIsVideoCall(isVideoCall)
-            .setAllowAssistedDial(
-                allowAssistedDial,
-                ConcreteCreator.createNewAssistedDialingMediator(
-                    getContext().getSystemService(TelephonyManager.class),
-                    getContext().getApplicationContext()))
-            .build();
-    DialerUtils.startActivityWithErrorToast(getActivity(), intent);
-    FragmentUtils.getParentUnsafe(this, SearchFragmentListener.class).onCallPlaced();
+            .setAllowAssistedDial(allowAssistedDial));
+    FragmentUtils.getParentUnsafe(this, SearchFragmentListener.class).onCallPlacedFromSearch();
   }
 
   @Override
@@ -504,7 +528,7 @@ public final class NewSearchFragment extends Fragment
         .logImpression(DialerImpression.Type.LIGHTBRINGER_VIDEO_REQUESTED_FROM_SEARCH);
     Intent intent = DuoComponent.get(getContext()).getDuo().getIntent(getContext(), phoneNumber);
     getActivity().startActivityForResult(intent, ActivityRequestCodes.DIALTACTS_DUO);
-    FragmentUtils.getParentUnsafe(this, SearchFragmentListener.class).onCallPlaced();
+    FragmentUtils.getParentUnsafe(this, SearchFragmentListener.class).onCallPlacedFromSearch();
   }
 
   @Override
@@ -524,6 +548,6 @@ public final class NewSearchFragment extends Fragment
     boolean onSearchListTouch(MotionEvent event);
 
     /** Called when a call is placed from the search fragment. */
-    void onCallPlaced();
+    void onCallPlacedFromSearch();
   }
 }

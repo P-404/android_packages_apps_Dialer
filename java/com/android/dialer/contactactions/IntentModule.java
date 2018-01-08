@@ -24,6 +24,8 @@ import android.support.annotation.StringRes;
 import android.telecom.PhoneAccountHandle;
 import com.android.dialer.callintent.CallInitiationType.Type;
 import com.android.dialer.callintent.CallIntentBuilder;
+import com.android.dialer.precall.PreCall;
+import com.android.dialer.util.DialerUtils;
 
 /**
  * {@link ContactActionModule} useful for making easy to build modules based on starting an intent.
@@ -54,7 +56,7 @@ public class IntentModule implements ContactActionModule {
 
   @Override
   public boolean onClick() {
-    context.startActivity(intent);
+    DialerUtils.startActivityWithErrorToast(context, intent);
     return true;
   }
 
@@ -66,9 +68,10 @@ public class IntentModule implements ContactActionModule {
     // TODO(zachh): Support post-dial digits; consider using DialerPhoneNumber.
     return new IntentModule(
         context,
-        new CallIntentBuilder(number, initiationType)
-            .setPhoneAccountHandle(phoneAccountHandle)
-            .build(),
+        PreCall.getIntent(
+            context,
+            new CallIntentBuilder(number, initiationType)
+                .setPhoneAccountHandle(phoneAccountHandle)),
         R.string.call,
         R.drawable.quantum_ic_call_white_24);
   }
@@ -81,10 +84,11 @@ public class IntentModule implements ContactActionModule {
     // TODO(zachh): Support post-dial digits; consider using DialerPhoneNumber.
     return new IntentModule(
         context,
-        new CallIntentBuilder(number, initiationType)
-            .setPhoneAccountHandle(phoneAccountHandle)
-            .setIsVideoCall(true)
-            .build(),
+        PreCall.getIntent(
+            context,
+            new CallIntentBuilder(number, initiationType)
+                .setPhoneAccountHandle(phoneAccountHandle)
+                .setIsVideoCall(true)),
         R.string.video_call,
         R.drawable.quantum_ic_videocam_white_24);
   }

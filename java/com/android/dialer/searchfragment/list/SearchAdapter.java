@@ -17,6 +17,7 @@
 package com.android.dialer.searchfragment.list;
 
 import android.content.Context;
+import android.support.annotation.Nullable;
 import android.support.annotation.VisibleForTesting;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.ViewHolder;
@@ -25,6 +26,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.ViewGroup;
+import com.android.dialer.callintent.CallInitiationType;
 import com.android.dialer.common.Assert;
 import com.android.dialer.searchfragment.common.RowClickListener;
 import com.android.dialer.searchfragment.common.SearchCursor;
@@ -43,6 +45,10 @@ public final class SearchAdapter extends RecyclerView.Adapter<ViewHolder> {
 
   private boolean showZeroSuggest;
   private String query;
+  // Raw query number from dialpad, which may contain special character such as "+". This is used
+  // for actions to add contact or send sms.
+  private String rawNumber;
+  private CallInitiationType.Type callInitiationType;
   private OnClickListener allowClickListener;
   private OnClickListener dismissClickListener;
   private RowClickListener rowClickListener;
@@ -106,7 +112,11 @@ public final class SearchAdapter extends RecyclerView.Adapter<ViewHolder> {
       ((HeaderViewHolder) holder).setHeader(header);
     } else if (holder instanceof SearchActionViewHolder) {
       ((SearchActionViewHolder) holder)
-          .setAction(searchCursorManager.getSearchAction(position), position, query);
+          .setAction(
+              searchCursorManager.getSearchAction(position),
+              position,
+              TextUtils.isEmpty(rawNumber) ? query : rawNumber,
+              callInitiationType);
     } else if (holder instanceof LocationPermissionViewHolder) {
       // No-op
     } else {
@@ -136,15 +146,17 @@ public final class SearchAdapter extends RecyclerView.Adapter<ViewHolder> {
 
   /**
    * @param visible If true and query is empty, the adapter won't show any list elements.
-   * @see #setQuery(String)
+   * @see #setQuery(String, String, CallInitiationType.Type)
    * @see #getItemCount()
    */
   public void setZeroSuggestVisible(boolean visible) {
     showZeroSuggest = visible;
   }
 
-  public void setQuery(String query) {
+  public void setQuery(String query, @Nullable String rawNumber, CallInitiationType.Type type) {
     this.query = query;
+    this.rawNumber = rawNumber;
+    this.callInitiationType = type;
     if (searchCursorManager.setQuery(query)) {
       notifyDataSetChanged();
     }

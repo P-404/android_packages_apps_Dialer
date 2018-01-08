@@ -57,6 +57,7 @@ import com.android.dialer.compat.ActivityCompat;
 import com.android.dialer.logging.DialerImpression;
 import com.android.dialer.logging.Logger;
 import com.android.dialer.multimedia.MultimediaData;
+import com.android.dialer.telecom.TelecomUtil;
 import com.android.dialer.util.ViewUtil;
 import com.android.incallui.answer.impl.CreateCustomSmsDialogFragment.CreateCustomSmsHolder;
 import com.android.incallui.answer.impl.SmsBottomSheetFragment.SmsSheetHolder;
@@ -693,6 +694,8 @@ public class AnswerFragment extends Fragment
     updateImportanceBadgeVisibility();
 
     contactGridManager = new ContactGridManager(view, null, 0, false /* showAnonymousAvatar */);
+    boolean isInMultiWindowMode = ActivityCompat.isInMultiWindowMode(getActivity());
+    contactGridManager.onMultiWindowModeChanged(isInMultiWindowMode);
 
     Fragment answerMethod =
         getChildFragmentManager().findFragmentById(R.id.answer_method_container);
@@ -711,7 +714,7 @@ public class AnswerFragment extends Fragment
     initSecondaryButton();
 
     int flags = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION;
-    if (!ActivityCompat.isInMultiWindowMode(getActivity())
+    if (!isInMultiWindowMode
         && (getActivity().checkSelfPermission(permission.STATUS_BAR)
             == PackageManager.PERMISSION_GRANTED)) {
       LogUtil.i("AnswerFragment.onCreateView", "STATUS_BAR permission granted, disabling nav bar");
@@ -985,6 +988,8 @@ public class AnswerFragment extends Fragment
                 secondaryButton.animate().alpha(1);
               }
             });
+
+    TelecomUtil.silenceRinger(getContext());
   }
 
   @Override

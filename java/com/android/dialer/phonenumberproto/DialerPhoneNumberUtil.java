@@ -25,11 +25,14 @@ import com.android.dialer.DialerPhoneNumber;
 import com.android.dialer.DialerPhoneNumber.RawInput;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
+import com.google.common.base.Optional;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.i18n.phonenumbers.NumberParseException;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
 import com.google.i18n.phonenumbers.PhoneNumberUtil.MatchType;
+import com.google.i18n.phonenumbers.PhoneNumberUtil.PhoneNumberFormat;
+import com.google.i18n.phonenumbers.Phonenumber.PhoneNumber;
 
 /**
  * Wrapper for selected methods in {@link PhoneNumberUtil} which uses the {@link DialerPhoneNumber}
@@ -122,5 +125,33 @@ public class DialerPhoneNumberUtil {
     return phoneNumberUtil.isNumberMatch(
         Converter.protoToPojo(Assert.isNotNull(firstNumberIn)),
         Converter.protoToPojo(Assert.isNotNull(secondNumberIn)));
+  }
+
+  /**
+   * Formats the provided number to e164 format or return raw number if number is unparseable.
+   *
+   * @see PhoneNumberUtil#format(PhoneNumber, PhoneNumberFormat)
+   */
+  @WorkerThread
+  public String normalizeNumber(DialerPhoneNumber number) {
+    Assert.isWorkerThread();
+    return formatToE164(number).or(number.getRawInput().getNumber());
+  }
+
+  /**
+   * Formats the provided number to e164 format if possible.
+   *
+   * @see PhoneNumberUtil#format(PhoneNumber, PhoneNumberFormat)
+   */
+  @WorkerThread
+  public Optional<String> formatToE164(DialerPhoneNumber number) {
+    Assert.isWorkerThread();
+    if (number.hasDialerInternalPhoneNumber()) {
+      return Optional.of(
+          phoneNumberUtil.format(
+              Converter.protoToPojo(number.getDialerInternalPhoneNumber()),
+              PhoneNumberFormat.E164));
+    }
+    return Optional.absent();
   }
 }

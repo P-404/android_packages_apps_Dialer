@@ -23,7 +23,10 @@ import android.telecom.ConnectionRequest;
 import android.telecom.VideoProfile;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
+import com.android.dialer.simulator.Simulator;
 import com.android.dialer.simulator.Simulator.Event;
+import com.android.dialer.simulator.SimulatorComponent;
+import com.android.dialer.simulator.SimulatorConnectionsBank;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,6 +34,7 @@ import java.util.List;
 public final class SimulatorConnection extends Connection {
   private final List<Listener> listeners = new ArrayList<>();
   private final List<Event> events = new ArrayList<>();
+  private final SimulatorConnectionsBank simulatorConnectionsBank;
   private int currentState = STATE_NEW;
 
   SimulatorConnection(@NonNull Context context, @NonNull ConnectionRequest request) {
@@ -43,10 +47,15 @@ public final class SimulatorConnection extends Connection {
             | CAPABILITY_HOLD
             | CAPABILITY_CAN_UPGRADE_TO_VIDEO
             | CAPABILITY_DISCONNECT_FROM_CONFERENCE);
-    if (request.getExtras() != null && !request.getExtras().getBoolean("ISVOLTE")) {
-      setConnectionCapabilities(getConnectionCapabilities() | CAPABILITY_SEPARATE_FROM_CONFERENCE);
+
+    if (request.getExtras() != null) {
+      if (!request.getExtras().getBoolean(Simulator.IS_VOLTE)) {
+        setConnectionCapabilities(
+            getConnectionCapabilities() | CAPABILITY_SEPARATE_FROM_CONFERENCE);
+      }
     }
     setVideoProvider(new SimulatorVideoProvider(context, this));
+    simulatorConnectionsBank = SimulatorComponent.get(context).getSimulatorConnectionsBank();
   }
 
   public void addListener(@NonNull Listener listener) {
@@ -71,6 +80,7 @@ public final class SimulatorConnection extends Connection {
   @Override
   public void onReject() {
     LogUtil.enterBlock("SimulatorConnection.onReject");
+    simulatorConnectionsBank.remove(this);
     onEvent(new Event(Event.REJECT));
   }
 
@@ -89,6 +99,7 @@ public final class SimulatorConnection extends Connection {
   @Override
   public void onDisconnect() {
     LogUtil.enterBlock("SimulatorConnection.onDisconnect");
+    simulatorConnectionsBank.remove(this);
     onEvent(new Event(Event.DISCONNECT));
   }
 
@@ -130,4 +141,6 @@ public final class SimulatorConnection extends Connection {
   public interface Listener {
     void onEvent(@NonNull SimulatorConnection connection, @NonNull Event event);
   }
+
+
 }

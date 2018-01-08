@@ -17,6 +17,7 @@ package com.android.dialer.calllog.ui;
 
 import android.database.Cursor;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.LoaderManager.LoaderCallbacks;
 import android.support.v4.content.Loader;
@@ -28,10 +29,12 @@ import android.view.ViewGroup;
 import com.android.dialer.calllog.CallLogComponent;
 import com.android.dialer.calllog.CallLogFramework;
 import com.android.dialer.calllog.CallLogFramework.CallLogUi;
+import com.android.dialer.calllog.RefreshAnnotatedCallLogWorker;
 import com.android.dialer.common.LogUtil;
-import com.android.dialer.common.concurrent.DialerExecutor;
 import com.android.dialer.common.concurrent.DialerExecutorComponent;
-import com.android.dialer.common.concurrent.DialerExecutorFactory;
+import com.android.dialer.common.concurrent.ThreadUtil;
+import com.android.dialer.common.concurrent.UiListener;
+import com.google.common.util.concurrent.ListenableFuture;
 
 /** The "new" call log fragment implementation, which is built on top of the annotated call log. */
 public final class NewCallLogFragment extends Fragment
@@ -45,34 +48,31 @@ public final class NewCallLogFragment extends Fragment
    */
   private static final long WAIT_MILLIS = 100L;
 
-  private DialerExecutor<Boolean> refreshAnnotatedCallLogTask;
+  private RefreshAnnotatedCallLogWorker refreshAnnotatedCallLogWorker;
+  private UiListener<Void> refreshAnnotatedCallLogListener;
   private RecyclerView recyclerView;
+  @Nullable private Runnable refreshAnnotatedCallLogRunnable;
 
   public NewCallLogFragment() {
     LogUtil.enterBlock("NewCallLogFragment.NewCallLogFragment");
   }
 
   @Override
-  public void onCreate(Bundle state) {
-    super.onCreate(state);
+  public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+    super.onActivityCreated(savedInstanceState);
 
-    LogUtil.enterBlock("NewCallLogFragment.onCreate");
+    LogUtil.enterBlock("NewCallLogFragment.onActivityCreated");
 
     CallLogComponent component = CallLogComponent.get(getContext());
     CallLogFramework callLogFramework = component.callLogFramework();
     callLogFramework.attachUi(this);
 
-    DialerExecutorFactory dialerExecutorFactory =
-        DialerExecutorComponent.get(getContext()).dialerExecutorFactory();
-
     // TODO(zachh): Use support fragment manager and add support for them in executors library.
-    refreshAnnotatedCallLogTask =
-        dialerExecutorFactory
-            .createUiTaskBuilder(
-                getActivity().getFragmentManager(),
-                "NewCallLogFragment.refreshAnnotatedCallLog",
-                component.getRefreshAnnotatedCallLogWorker())
-            .build();
+    refreshAnnotatedCallLogListener =
+        DialerExecutorComponent.get(getContext())
+            .createUiListener(
+                getActivity().getFragmentManager(), "NewCallLogFragment.refreshAnnotatedCallLog");
+    refreshAnnotatedCallLogWorker = component.getRefreshAnnotatedCallLogWorker();
   }
 
   @Override
@@ -92,7 +92,7 @@ public final class NewCallLogFragment extends Fragment
     callLogFramework.attachUi(this);
 
     // TODO(zachh): Consider doing this when fragment becomes visible.
-    checkAnnotatedCallLogDirtyAndRefreshIfNecessary();
+    refreshAnnotatedCallLog(true /* checkDirty */);
   }
 
   @Override
@@ -100,6 +100,9 @@ public final class NewCallLogFragment extends Fragment
     super.onPause();
 
     LogUtil.enterBlock("NewCallLogFragment.onPause");
+
+    // This is pending work that we don't actually need to follow through with.
+    ThreadUtil.getUiThreadHandler().removeCallbacks(refreshAnnotatedCallLogRunnable);
 
     CallLogFramework callLogFramework = CallLogComponent.get(getContext()).callLogFramework();
     callLogFramework.detachUi();
@@ -118,15 +121,36 @@ public final class NewCallLogFragment extends Fragment
     return view;
   }
 
-  private void checkAnnotatedCallLogDirtyAndRefreshIfNecessary() {
-    LogUtil.enterBlock("NewCallLogFragment.checkAnnotatedCallLogDirtyAndRefreshIfNecessary");
-    refreshAnnotatedCallLogTask.executeSerialWithWait(false /* skipDirtyCheck */, WAIT_MILLIS);
+  private void refreshAnnotatedCallLog(boolean checkDirty) {
+    LogUtil.enterBlock("NewCallLogFragment.refreshAnnotatedCallLog");
+
+    // If we already scheduled a refresh, cancel it and schedule a new one so that repeated requests
+    // in quick succession don't result in too much work. For example, if we get 10 requests in
+    // 10ms, and a complete refresh takes a constant 200ms, the refresh will take 300ms (100ms wait
+    // and 1 iteration @200ms) instead of 2 seconds (10 iterations @ 200ms) since the work requests
+    // are serialized in RefreshAnnotatedCallLogWorker.
+    //
+    // We might get many requests in quick succession, for example, when the simulator inserts
+    // hundreds of rows into the system call log, or when the data for a new call is incrementally
+    // written to different columns as it becomes available.
+    ThreadUtil.getUiThreadHandler().removeCallbacks(refreshAnnotatedCallLogRunnable);
+
+    refreshAnnotatedCallLogRunnable =
+        () -> {
+          ListenableFuture<Void> future =
+              checkDirty
+                  ? refreshAnnotatedCallLogWorker.refreshWithDirtyCheck()
+                  : refreshAnnotatedCallLogWorker.refreshWithoutDirtyCheck();
+          refreshAnnotatedCallLogListener.listen(
+              getContext(), future, unused -> {}, RuntimeException::new);
+        };
+    ThreadUtil.getUiThreadHandler().postDelayed(refreshAnnotatedCallLogRunnable, WAIT_MILLIS);
   }
 
   @Override
   public void invalidateUi() {
     LogUtil.enterBlock("NewCallLogFragment.invalidateUi");
-    refreshAnnotatedCallLogTask.executeSerialWithWait(true /* skipDirtyCheck */, WAIT_MILLIS);
+    refreshAnnotatedCallLog(false /* checkDirty */);
   }
 
   @Override

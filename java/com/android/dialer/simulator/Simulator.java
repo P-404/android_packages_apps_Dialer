@@ -16,9 +16,10 @@
 
 package com.android.dialer.simulator;
 
-import android.content.Context;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
+import android.support.annotation.StringDef;
+import android.support.v7.app.AppCompatActivity;
 import android.view.ActionProvider;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -28,7 +29,7 @@ import java.util.Objects;
 public interface Simulator {
   boolean shouldShow();
 
-  ActionProvider getActionProvider(Context context);
+  ActionProvider getActionProvider(AppCompatActivity activity);
 
   /** The type of conference to emulate. */
   // TODO(a bug): add VoLTE and CDMA conference call
@@ -41,6 +42,32 @@ public interface Simulator {
 
   static final int CONFERENCE_TYPE_GSM = 1;
   static final int CONFERENCE_TYPE_VOLTE = 2;
+
+  /** The types of connection service listener events */
+  @Retention(RetentionPolicy.SOURCE)
+  @IntDef({
+    ON_NEW_OUTGOING_CONNECTION,
+    ON_NEW_INCOMING_CONNECTION,
+    ON_CONFERENCE,
+  })
+  @interface ConnectionServiceEventType {}
+
+  static final int ON_NEW_OUTGOING_CONNECTION = 1;
+  static final int ON_NEW_INCOMING_CONNECTION = 2;
+  static final int ON_CONFERENCE = 3;
+
+  static final String CALLER_ID_PRESENTATION_TYPE = "caller_id_";
+
+  /** Bundle keys that are used in making fake call. */
+  @Retention(RetentionPolicy.SOURCE)
+  @StringDef({
+    IS_VOLTE,
+    PRESENTATION_CHOICE,
+  })
+  @interface BundleKey {}
+
+  public final String IS_VOLTE = "ISVOLTE";
+  public final String PRESENTATION_CHOICE = "PRESENTATIONCHOICE";
 
   /** Information about a connection event. */
   public static class Event {

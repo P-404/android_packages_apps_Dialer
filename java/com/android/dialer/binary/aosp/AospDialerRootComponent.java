@@ -22,10 +22,14 @@ import com.android.dialer.common.concurrent.DialerExecutorModule;
 import com.android.dialer.configprovider.SharedPrefConfigProviderModule;
 import com.android.dialer.duo.stub.StubDuoModule;
 import com.android.dialer.enrichedcall.stub.StubEnrichedCallModule;
+import com.android.dialer.feedback.stub.StubFeedbackModule;
 import com.android.dialer.inject.ContextModule;
 import com.android.dialer.phonelookup.PhoneLookupModule;
 import com.android.dialer.phonenumbergeoutil.impl.PhoneNumberGeoUtilModule;
+import com.android.dialer.precall.impl.PreCallModule;
+import com.android.dialer.preferredsim.suggestion.stub.StubSimSuggestionModule;
 import com.android.dialer.simulator.impl.SimulatorModule;
+import com.android.dialer.spam.StubSpamModule;
 import com.android.dialer.storage.StorageModule;
 import com.android.dialer.strictmode.impl.SystemStrictModeModule;
 import com.android.incallui.calllocation.stub.StubCallLocationModule;
@@ -43,6 +47,7 @@ import javax.inject.Singleton;
     DialerExecutorModule.class,
     PhoneLookupModule.class,
     PhoneNumberGeoUtilModule.class,
+    PreCallModule.class,
     SharedPrefConfigProviderModule.class,
     SimulatorModule.class,
     StorageModule.class,
@@ -51,7 +56,10 @@ import javax.inject.Singleton;
     StubDuoModule.class,
     StubEnrichedCallModule.class,
     StubMapsModule.class,
-    VoicemailModule.class
+    VoicemailModule.class,
+    StubSimSuggestionModule.class,
+    StubFeedbackModule.class,
+    StubSpamModule.class,
   }
 )
 public interface AospDialerRootComponent extends BaseDialerRootComponent {}

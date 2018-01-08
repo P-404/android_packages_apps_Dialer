@@ -36,7 +36,17 @@ public class DuoStub implements Duo {
   public DuoStub() {}
 
   @Override
-  public boolean isEnabled() {
+  public boolean isEnabled(@NonNull Context context) {
+    return false;
+  }
+
+  @Override
+  public boolean isInstalled(@NonNull Context context) {
+    return false;
+  }
+
+  @Override
+  public boolean isActivated(@NonNull Context context) {
     return false;
   }
 
@@ -62,6 +72,9 @@ public class DuoStub implements Duo {
     Assert.isNotNull(context);
     Assert.isNotNull(numbers);
   }
+
+  @Override
+  public void reloadReachability(@NonNull Context context) {}
 
   @MainThread
   @Override

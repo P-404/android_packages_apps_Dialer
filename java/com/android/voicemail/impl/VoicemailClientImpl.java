@@ -16,12 +16,15 @@ package com.android.voicemail.impl;
 import android.annotation.TargetApi;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build.VERSION_CODES;
 import android.os.PersistableBundle;
+import android.preference.PreferenceManager;
 import android.provider.VoicemailContract.Status;
 import android.provider.VoicemailContract.Voicemails;
 import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.os.BuildCompat;
 import android.telecom.PhoneAccountHandle;
 import android.telephony.TelephonyManager;
@@ -31,6 +34,7 @@ import com.android.dialer.configprovider.ConfigProviderBindings;
 import com.android.voicemail.PinChanger;
 import com.android.voicemail.VisualVoicemailTypeExtensions;
 import com.android.voicemail.VoicemailClient;
+import com.android.voicemail.VoicemailVersionConstants;
 import com.android.voicemail.impl.configui.VoicemailSecretCodeActivity;
 import com.android.voicemail.impl.settings.VisualVoicemailSettingsUtil;
 import com.android.voicemail.impl.sync.VvmAccountManager;
@@ -126,9 +130,25 @@ public class VoicemailClientImpl implements VoicemailClient {
     }
 
     TranscriptionConfigProvider provider = new TranscriptionConfigProvider(context);
-    if (!provider.isVoicemailTranscriptionEnabled()) {
+    if (!provider.isVoicemailTranscriptionAvailable()) {
       LogUtil.i(
           "VoicemailClientImpl.isVoicemailTranscriptionAvailable", "feature disabled by config");
+      return false;
+    }
+
+    return true;
+  }
+
+  @Override
+  public boolean isVoicemailDonationAvailable(Context context) {
+    if (!isVoicemailTranscriptionAvailable(context)) {
+      LogUtil.i("VoicemailClientImpl.isVoicemailDonationAvailable", "transcription not available");
+      return false;
+    }
+
+    TranscriptionConfigProvider provider = new TranscriptionConfigProvider(context);
+    if (!provider.isVoicemailDonationAvailable()) {
+      LogUtil.i("VoicemailClientImpl.isVoicemailDonationAvailable", "feature disabled by config");
       return false;
     }
 
@@ -269,8 +289,30 @@ public class VoicemailClientImpl implements VoicemailClient {
   }
 
   @Override
-  public void onTosAccepted(Context context) {
+  public void onTosAccepted(Context context, PhoneAccountHandle account) {
     LogUtil.i("VoicemailClientImpl.onTosAccepted", "try backfilling voicemail transcriptions");
-    TranscriptionBackfillService.scheduleTask(context);
+    TranscriptionBackfillService.scheduleTask(context, account);
+  }
+
+  @Override
+  public boolean hasAcceptedTos(Context context, PhoneAccountHandle phoneAccountHandle) {
+    SharedPreferences preferences =
+        PreferenceManager.getDefaultSharedPreferences(context.getApplicationContext());
+    OmtpVvmCarrierConfigHelper helper = new OmtpVvmCarrierConfigHelper(context, phoneAccountHandle);
+    boolean isVvm3 = VisualVoicemailTypeExtensions.VVM_TYPE_VVM3.equals(helper.getVvmType());
+    if (isVvm3) {
+      return preferences.getInt(VoicemailVersionConstants.PREF_VVM3_TOS_VERSION_ACCEPTED_KEY, 0)
+          >= VoicemailVersionConstants.CURRENT_VVM3_TOS_VERSION;
+    } else {
+      return preferences.getInt(VoicemailVersionConstants.PREF_DIALER_TOS_VERSION_ACCEPTED_KEY, 0)
+          >= VoicemailVersionConstants.CURRENT_DIALER_TOS_VERSION;
+    }
+  }
+
+  @Override
+  @Nullable
+  public String getCarrierConfigString(Context context, PhoneAccountHandle account, String key) {
+    OmtpVvmCarrierConfigHelper helper = new OmtpVvmCarrierConfigHelper(context, account);
+    return helper.isValid() ? helper.getString(key) : null;
   }
 }

@@ -14,6 +14,8 @@
 package com.android.dialer.voicemail.settings;
 
 import android.annotation.TargetApi;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
@@ -24,16 +26,22 @@ import android.preference.PreferenceScreen;
 import android.preference.SwitchPreference;
 import android.provider.Settings;
 import android.support.annotation.Nullable;
+import android.support.annotation.VisibleForTesting;
+import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
+import android.telecom.TelecomManager;
+import android.telephony.SubscriptionInfo;
 import android.telephony.TelephonyManager;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
 import com.android.dialer.logging.DialerImpression;
 import com.android.dialer.logging.Logger;
 import com.android.dialer.notification.NotificationChannelManager;
+import com.android.dialer.telecom.TelecomUtil;
 import com.android.voicemail.VoicemailClient;
 import com.android.voicemail.VoicemailClient.ActivationStateListener;
 import com.android.voicemail.VoicemailComponent;
+import com.google.common.base.Optional;
 
 /**
  * Fragment for voicemail settings. Requires {@link VoicemailClient#PARAM_PHONE_ACCOUNT_HANDLE} set
@@ -44,6 +52,16 @@ public class VoicemailSettingsFragment extends PreferenceFragment
     implements Preference.OnPreferenceChangeListener, ActivationStateListener {
 
   private static final String TAG = "VmSettingsActivity";
+
+  // Extras copied from com.android.phone.settings.VoicemailSettingsActivity,
+  // it does not recognize EXTRA_PHONE_ACCOUNT_HANDLE in O.
+  @VisibleForTesting
+  static final String SUB_ID_EXTRA =
+      "com.android.phone.settings.SubscriptionInfoHelper.SubscriptionId";
+  // Extra on intent containing the label of a subscription.
+  @VisibleForTesting
+  static final String SUB_LABEL_EXTRA =
+      "com.android.phone.settings.SubscriptionInfoHelper.SubscriptionLabel";
 
   @Nullable private PhoneAccountHandle phoneAccountHandle;
 
@@ -113,7 +131,7 @@ public class VoicemailSettingsFragment extends PreferenceFragment
 
     if (!VoicemailComponent.get(getContext())
         .getVoicemailClient()
-        .isVoicemailDonationEnabled(getContext(), phoneAccountHandle)) {
+        .isVoicemailDonationAvailable(getContext())) {
       getPreferenceScreen().removePreference(donateVoicemailSwitchPreference);
     }
 
@@ -167,6 +185,19 @@ public class VoicemailSettingsFragment extends PreferenceFragment
     advancedSettingsIntent.putExtra(TelephonyManager.EXTRA_HIDE_PUBLIC_SETTINGS, true);
     advancedSettingsIntent.putExtra(
         TelephonyManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle);
+
+    // (a bug): EXTRA_PHONE_ACCOUNT_HANDLE not implemented in telephony in O.
+    Optional<SubscriptionInfo> subscriptionInfo =
+        TelecomUtil.getSubscriptionInfo(getContext(), phoneAccountHandle);
+    if (subscriptionInfo.isPresent()) {
+      advancedSettingsIntent.putExtra(SUB_ID_EXTRA, subscriptionInfo.get().getSubscriptionId());
+      PhoneAccount phoneAccount =
+          getContext().getSystemService(TelecomManager.class).getPhoneAccount(phoneAccountHandle);
+      if (phoneAccount != null) {
+        advancedSettingsIntent.putExtra(SUB_LABEL_EXTRA, phoneAccount.getLabel());
+      }
+    }
+
     advancedSettings.setIntent(advancedSettingsIntent);
     voicemailChangePinPreference.setOnPreferenceClickListener(
         new OnPreferenceClickListener() {
@@ -197,16 +228,13 @@ public class VoicemailSettingsFragment extends PreferenceFragment
     LogUtil.d(TAG, "onPreferenceChange: \"" + preference + "\" changed to \"" + objValue + "\"");
     if (preference.getKey().equals(voicemailVisualVoicemail.getKey())) {
       boolean isEnabled = (boolean) objValue;
-      voicemailClient.setVoicemailEnabled(getContext(), phoneAccountHandle, isEnabled);
-
-      if (isEnabled) {
-        Logger.get(getContext()).logImpression(DialerImpression.Type.VVM_USER_ENABLED_IN_SETTINGS);
+      if (!isEnabled) {
+        showDisableConfirmationDialog();
+        // Don't let the preference setting proceed.
+        return false;
       } else {
-        Logger.get(getContext()).logImpression(DialerImpression.Type.VVM_USER_DISABLED_IN_SETTINGS);
+        updateVoicemailEnabled(true);
       }
-
-      updateChangePin();
-      updateDonateVoicemail();
     } else if (preference.getKey().equals(autoArchiveSwitchPreference.getKey())) {
       logArchiveToggle((boolean) objValue);
       voicemailClient.setVoicemailArchiveEnabled(
@@ -217,8 +245,22 @@ public class VoicemailSettingsFragment extends PreferenceFragment
           getContext(), phoneAccountHandle, (boolean) objValue);
     }
 
-    // Always let the preference setting proceed.
+    // Let the preference setting proceed.
     return true;
+  }
+
+  private void updateVoicemailEnabled(boolean isEnabled) {
+    voicemailClient.setVoicemailEnabled(getContext(), phoneAccountHandle, isEnabled);
+    voicemailVisualVoicemail.setChecked(isEnabled);
+
+    if (isEnabled) {
+      Logger.get(getContext()).logImpression(DialerImpression.Type.VVM_USER_ENABLED_IN_SETTINGS);
+    } else {
+      Logger.get(getContext()).logImpression(DialerImpression.Type.VVM_USER_DISABLED_IN_SETTINGS);
+    }
+
+    updateChangePin();
+    updateDonateVoicemail();
   }
 
   private void updateChangePin() {
@@ -275,5 +317,35 @@ public class VoicemailSettingsFragment extends PreferenceFragment
     return new Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
         .putExtra(Settings.EXTRA_CHANNEL_ID, channelId)
         .putExtra(Settings.EXTRA_APP_PACKAGE, getContext().getPackageName());
+  }
+
+  private void showDisableConfirmationDialog() {
+    LogUtil.i(TAG, "showDisableConfirmationDialog");
+    AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
+    builder.setTitle(R.string.confirm_disable_voicemail_dialog_title);
+    builder.setMessage(R.string.confirm_disable_voicemail_dialog_message);
+    builder.setPositiveButton(
+        R.string.confirm_disable_voicemail_accept_dialog_label,
+        new DialogInterface.OnClickListener() {
+          @Override
+          public void onClick(DialogInterface dialog, int which) {
+            LogUtil.i(TAG, "showDisableConfirmationDialog, confirmed");
+            updateVoicemailEnabled(false);
+            dialog.dismiss();
+          }
+        });
+
+    builder.setNegativeButton(
+        android.R.string.cancel,
+        new DialogInterface.OnClickListener() {
+          @Override
+          public void onClick(DialogInterface dialog, int which) {
+            LogUtil.i(TAG, "showDisableConfirmationDialog, cancelled");
+            dialog.dismiss();
+          }
+        });
+
+    builder.setCancelable(true);
+    builder.show();
   }
 }

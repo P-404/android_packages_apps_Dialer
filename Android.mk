@@ -84,84 +84,7 @@ EXCLUDE_EXTRA_PACKAGES := \
 	com.android.incallui.maps.impl \
 
 # We specify each package explicitly to glob resource files.
-# find . -type f -name "AndroidManifest.xml" | uniq | sort | cut -c 8- | rev | cut -c 21- | rev | sed 's/\//./g' | sed 's/$/ \\/'
-LOCAL_AAPT_FLAGS := \
-	com.android.bubble \
-	com.android.contacts.common \
-	com.android.dialer.about \
-	com.android.dialer.app \
-	com.android.dialer.app.manifests.activities \
-	com.android.dialer.app.voicemail.error \
-	com.android.dialer.assisteddialing.ui \
-	com.android.dialer.backup \
-	com.android.dialer.binary.aosp.testing \
-	com.android.dialer.binary.google \
-	com.android.dialer.blocking \
-	com.android.dialer.callcomposer \
-	com.android.dialer.callcomposer.camera \
-	com.android.dialer.callcomposer.camera.camerafocus \
-	com.android.dialer.callcomposer.cameraui \
-	com.android.dialer.calldetails \
-	com.android.dialer.calllog.database \
-	com.android.dialer.calllog.ui \
-	com.android.dialer.calllog.ui.menu \
-	com.android.dialer.calllogutils \
-	com.android.dialer.clipboard \
-	com.android.dialer.common \
-	com.android.dialer.configprovider \
-	com.android.dialer.contactactions \
-	com.android.dialer.contactphoto \
-	com.android.dialer.contactsfragment \
-	com.android.dialer.databasepopulator \
-	com.android.dialer.dialpadview \
-	com.android.dialer.enrichedcall.simulator \
-	com.android.dialer.interactions \
-	com.android.dialer.lettertile \
-	com.android.dialer.location \
-	com.android.dialer.main.impl \
-	com.android.dialer.notification \
-	com.android.dialer.oem \
-	com.android.dialer.phonenumberutil \
-	com.android.dialer.postcall \
-	com.android.dialer.searchfragment.common \
-	com.android.dialer.searchfragment.cp2 \
-	com.android.dialer.searchfragment.list \
-	com.android.dialer.searchfragment.nearbyplaces \
-	com.android.dialer.searchfragment.remote \
-	com.android.dialer.shortcuts \
-	com.android.dialer.simulator.impl \
-	com.android.dialer.speeddial \
-	com.android.dialer.theme \
-	com.android.dialer.util \
-	com.android.dialer.voicemail.listui \
-        com.android.dialer.voicemail.settings \
-	com.android.dialer.voicemailstatus \
-	com.android.dialer.widget \
-	com.android.incallui \
-	com.android.incallui.answer.impl.affordance \
-	com.android.incallui.answer.impl \
-	com.android.incallui.answer.impl.answermethod \
-	com.android.incallui.answer.impl.hint \
-	com.android.incallui.audioroute \
-	com.android.incallui.autoresizetext \
-	com.android.incallui.calllocation.impl \
-	com.android.incallui.callpending \
-	com.android.incallui.commontheme \
-	com.android.incallui.contactgrid \
-	com.android.incallui.disconnectdialog \
-	com.android.incallui.hold \
-	com.android.incallui.incall.impl \
-	com.android.incallui.maps.impl \
-	com.android.incallui.sessiondata \
-	com.android.incallui.spam \
-	com.android.incallui.speakerbuttonlogic \
-	com.android.incallui.telecomeventui \
-	com.android.incallui.video.impl \
-	com.android.incallui.video.protocol \
-	com.android.newbubble \
-	com.android.voicemail \
-	com.android.voicemail.impl \
-	com.android.voicemail.impl.configui \
+include ${LOCAL_PATH}/packages.mk
 
 LOCAL_AAPT_FLAGS := $(filter-out $(EXCLUDE_EXTRA_PACKAGES),$(LOCAL_AAPT_FLAGS))
 LOCAL_AAPT_FLAGS := $(addprefix --extra-packages , $(LOCAL_AAPT_FLAGS))
@@ -189,7 +112,8 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
 	dialer-libshortcutbadger-target \
 	dialer-mime4j-core-target \
 	dialer-mime4j-dom-target \
-	guava \
+	dialer-error-prone-target \
+	dialer-guava-target \
 	jsr305 \
 	libbackup \
 	libphonenumber \
@@ -263,18 +187,18 @@ EXCLUDE_EXTRA_PACKAGES :=
 include $(CLEAR_VARS)
 
 LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES := \
-    dialer-auto-value:../../../prebuilts/tools/common/m2/repository/com/google/auto/value/auto-value/1.3/auto-value-1.3$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-dagger2-compiler:../../../prebuilts/tools/common/m2/repository/com/google/dagger/dagger-compiler/2.7/dagger-compiler-2.7$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-dagger2:../../../prebuilts/tools/common/m2/repository/com/google/dagger/dagger/2.7/dagger-2.7$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-dagger2-producers:../../../prebuilts/tools/common/m2/repository/com/google/dagger/dagger-producers/2.7/dagger-producers-2.7$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-grpc-all:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-all/1.0.3/grpc-all-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-grpc-core:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-core/1.0.3/grpc-core-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-grpc-okhttp:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-okhttp/1.0.3/grpc-okhttp-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-grpc-protobuf-lite:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-protobuf-lite/1.0.3/grpc-protobuf-lite-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-grpc-stub:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-stub/1.0.3/grpc-stub-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-guava:../../../prebuilts/tools/common/m2/repository/com/google/guava/guava/20.0/guava-20.0$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-javax-annotation-api:../../../prebuilts/tools/common/m2/repository/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2$(COMMON_JAVA_PACKAGE_SUFFIX) \
-    dialer-javax-inject:../../../prebuilts/tools/common/m2/repository/javax/inject/javax.inject/1/javax.inject-1$(COMMON_JAVA_PACKAGE_SUFFIX)
+    dialer-auto-value:../../../prebuilts/tools/common/m2/repository/com/google/auto/value/auto-value/1.3/auto-value-1.3.jar \
+    dialer-dagger2-compiler:../../../prebuilts/tools/common/m2/repository/com/google/dagger/dagger-compiler/2.7/dagger-compiler-2.7.jar \
+    dialer-dagger2:../../../prebuilts/tools/common/m2/repository/com/google/dagger/dagger/2.7/dagger-2.7.jar \
+    dialer-dagger2-producers:../../../prebuilts/tools/common/m2/repository/com/google/dagger/dagger-producers/2.7/dagger-producers-2.7.jar \
+    dialer-grpc-all:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-all/1.0.3/grpc-all-1.0.3.jar \
+    dialer-grpc-core:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-core/1.0.3/grpc-core-1.0.3.jar \
+    dialer-grpc-okhttp:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-okhttp/1.0.3/grpc-okhttp-1.0.3.jar \
+    dialer-grpc-protobuf-lite:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-protobuf-lite/1.0.3/grpc-protobuf-lite-1.0.3.jar \
+    dialer-grpc-stub:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-stub/1.0.3/grpc-stub-1.0.3.jar \
+    dialer-guava:../../../prebuilts/tools/common/m2/repository/com/google/guava/guava/20.0/guava-20.0.jar \
+    dialer-javax-annotation-api:../../../prebuilts/tools/common/m2/repository/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2.jar \
+    dialer-javax-inject:../../../prebuilts/tools/common/m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar
 
 include $(BUILD_HOST_PREBUILT)
 
@@ -283,9 +207,29 @@ include $(BUILD_HOST_PREBUILT)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
+LOCAL_MODULE := dialer-guava-target
+LOCAL_SDK_VERSION := current
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/com/google/guava/guava/20.0/guava-20.0.jar
+LOCAL_UNINSTALLABLE_MODULE := true
+
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE_CLASS := JAVA_LIBRARIES
+LOCAL_MODULE := dialer-error-prone-target
+LOCAL_SDK_VERSION := current
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/com/google/errorprone/error_prone_annotations/2.0.18/error_prone_annotations-2.0.18.jar
+LOCAL_UNINSTALLABLE_MODULE := true
+
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-dagger2-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/com/google/dagger/dagger/2.7/dagger-2.7$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/com/google/dagger/dagger/2.7/dagger-2.7.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -295,7 +239,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-disklrucache-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/maven_repo/bumptech/com/github/bumptech/glide/disklrucache/SNAPSHOT/disklrucache-SNAPSHOT$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/maven_repo/bumptech/com/github/bumptech/glide/disklrucache/SNAPSHOT/disklrucache-SNAPSHOT.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -305,7 +249,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-gifdecoder-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/maven_repo/bumptech/com/github/bumptech/glide/gifdecoder/SNAPSHOT/gifdecoder-SNAPSHOT$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/maven_repo/bumptech/com/github/bumptech/glide/gifdecoder/SNAPSHOT/gifdecoder-SNAPSHOT.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -315,7 +259,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-glide-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/maven_repo/bumptech/com/github/bumptech/glide/glide/SNAPSHOT/glide-SNAPSHOT$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/maven_repo/bumptech/com/github/bumptech/glide/glide/SNAPSHOT/glide-SNAPSHOT.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -325,7 +269,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-javax-annotation-api-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -335,7 +279,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-libshortcutbadger-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/me/leolin/ShortcutBadger/1.1.13/ShortcutBadger-1.1.13$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/me/leolin/ShortcutBadger/1.1.13/ShortcutBadger-1.1.13.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -345,7 +289,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-javax-inject-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/javax/inject/javax.inject/1/javax.inject-1$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -355,7 +299,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-commons-io-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/commons-io/commons-io/2.4/commons-io-2.4$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/commons-io/commons-io/2.4/commons-io-2.4.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -365,7 +309,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-mime4j-core-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/org/apache/james/apache-mime4j-core/0.7.2/apache-mime4j-core-0.7.2$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/org/apache/james/apache-mime4j-core/0.7.2/apache-mime4j-core-0.7.2.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -375,7 +319,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-mime4j-dom-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/org/apache/james/apache-mime4j-dom/0.7.2/apache-mime4j-dom-0.7.2$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/org/apache/james/apache-mime4j-dom/0.7.2/apache-mime4j-dom-0.7.2.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -385,7 +329,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-grpc-core-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-core/1.0.3/grpc-core-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-core/1.0.3/grpc-core-1.0.3.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -395,7 +339,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-grpc-okhttp-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-okhttp/1.0.3/grpc-okhttp-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-okhttp/1.0.3/grpc-okhttp-1.0.3.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -405,7 +349,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-grpc-protobuf-lite-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-protobuf-lite/1.0.3/grpc-protobuf-lite-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-protobuf-lite/1.0.3/grpc-protobuf-lite-1.0.3.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -415,7 +359,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-grpc-stub-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-stub/1.0.3/grpc-stub-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-stub/1.0.3/grpc-stub-1.0.3.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -425,7 +369,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-grpc-all-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-all/1.0.3/grpc-all-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-all/1.0.3/grpc-all-1.0.3.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -435,7 +379,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-grpc-context-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-context/1.0.3/grpc-context-1.0.3$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-context/1.0.3/grpc-context-1.0.3.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -445,7 +389,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-auto-value-target
 LOCAL_SDK_VERSION := current
-LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/com/google/auto/value/auto-value/1.3/auto-value-1.3$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_SRC_FILES := ../../../prebuilts/tools/common/m2/repository/com/google/auto/value/auto-value/1.3/auto-value-1.3.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)

@@ -53,7 +53,8 @@ public abstract class NewBubbleInfo {
         .setPrimaryColor(bubbleInfo.getPrimaryColor())
         .setPrimaryIcon(bubbleInfo.getPrimaryIcon())
         .setStartingYPosition(bubbleInfo.getStartingYPosition())
-        .setActions(bubbleInfo.getActions());
+        .setActions(bubbleInfo.getActions())
+        .setAvatar(bubbleInfo.getAvatar());
   }
 
   /** Builder for {@link NewBubbleInfo} */
@@ -79,7 +80,7 @@ public abstract class NewBubbleInfo {
 
     public abstract Drawable getIconDrawable();
 
-    @Nullable
+    @NonNull
     public abstract CharSequence getName();
 
     @NonNull
@@ -108,7 +109,7 @@ public abstract class NewBubbleInfo {
 
       public abstract Builder setIconDrawable(Drawable iconDrawable);
 
-      public abstract Builder setName(@Nullable CharSequence name);
+      public abstract Builder setName(@NonNull CharSequence name);
 
       public abstract Builder setIntent(@NonNull PendingIntent intent);
 

@@ -13,10 +13,23 @@
      limitations under the License.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.android.dialer.assisteddialing">
+    package="com.android.dialer.assisteddialing.ui">
 
   <uses-sdk
       android:minSdkVersion="23"
-      android:targetSdkVersion="24"/>
+      android:targetSdkVersion="27"/>
+
+  <application>
+    <activity
+        android:label="@string/assisted_dialing_setting_title"
+        android:name=".AssistedDialingSettingActivity"
+        android:parentActivityName="com.android.dialer.app.settings.DialerSettingsActivity"
+        android:theme="@style/SettingsStyle">
+      <intent-filter>
+        <action android:name="com.android.dialer.app.settings.SHOW_ASSISTED_DIALING_SETTINGS"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+      </intent-filter>
+    </activity>
+  </application>
 
 </manifest>

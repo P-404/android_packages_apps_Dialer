@@ -348,6 +348,16 @@
        [CHAR LIMIT=30] -->
   <string name="call_log_action_video_call">Video call</string>
 
+  <!-- Button text for the "Set up" video calling option displayed underneath an entry in the call log.
+       Tapping causes a the user to be taken to set up video calling.
+       [CHAR LIMIT=30] -->
+  <string name="call_log_action_set_up_video">Set up</string>
+
+  <!-- Button text for the "Invite" option displayed underneath an entry in the call log.
+       Tapping causes a the user to be taken to the messaging app with a message ready to invite them to set up video calling.
+       [CHAR LIMIT=30] -->
+  <string name="call_log_action_invite_video">Invite</string>
+
   <!-- Button text for a button displayed underneath an entry in the call log, which opens up a
        messaging app to send a SMS to the number represented by the call log entry.
        [CHAR LIMIT=30] -->
@@ -664,6 +674,37 @@
   <!-- Label indicating that a voicemail transcription failed because no speech was detected
        [CHAR LIMIT=64] -->
   <string name="voicemail_transcription_failed_no_speech">Transcript not available. No speech detected.</string>
+
+  <!-- Prompt asking the user to rate the quality of the voicemail transcription [CHAR LIMIT=30]
+       voicemail_transcription_rating, voicemail_transcription_rating_good,
+       voicemail_transcription_rating_separator and voicemail_transcription_rating_bad are
+       used together to form the rating prompt: 'Rate transcription quality   Good or Bad'
+       where 'Good' and 'Bad' are clickable links. -->
+  <string name="voicemail_transcription_rating">Rate transcription quality</string>
+
+  <!-- Rating choice indicating that the voicemail transcription was good [CHAR LIMIT=10]
+       voicemail_transcription_rating, voicemail_transcription_rating_good,
+       voicemail_transcription_rating_separator and voicemail_transcription_rating_bad are
+       used together to form the rating prompt: 'Rate transcription quality   Good or Bad'
+       where 'Good' and 'Bad' are clickable links. -->
+  <string name="voicemail_transcription_rating_good">Good</string>
+
+  <!-- Rating choice indicating that the voicemail transcription was bad [CHAR LIMIT=10]
+       voicemail_transcription_rating, voicemail_transcription_rating_good,
+       voicemail_transcription_rating_separator and voicemail_transcription_rating_bad are
+       used together to form the rating prompt: 'Rate transcription quality   Good or Bad'
+       where 'Good' and 'Bad' are clickable links. -->
+  <string name="voicemail_transcription_rating_bad">Bad</string>
+
+  <!-- Separator between the good and bad transcription rating choices [CHAR LIMIT=10]
+       voicemail_transcription_rating, voicemail_transcription_rating_good,
+       voicemail_transcription_rating_separator and voicemail_transcription_rating_bad are
+       used together to form the rating prompt: 'Rate transcription quality   Good or Bad'
+       where 'Good' and 'Bad' are clickable links. -->
+  <string name="voicemail_transcription_rating_separator"> or </string>
+
+  <!-- Message displayed after user has rated a voicemail transcription [CHAR LIMIT=30] -->
+  <string name="voicemail_transcription_rating_thanks">Thanks for your feedback</string>
 
   <!-- Button text to prompt a user to open an sms conversation [CHAR LIMIT=NONE] -->
   <string name="view_conversation">View</string>

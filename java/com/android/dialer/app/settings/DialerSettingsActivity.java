@@ -35,12 +35,12 @@ import android.widget.Toast;
 import com.android.dialer.about.AboutPhoneFragment;
 import com.android.dialer.app.R;
 import com.android.dialer.assisteddialing.ConcreteCreator;
-import com.android.dialer.assisteddialing.ui.AssistedDialingSettingFragment;
 import com.android.dialer.blocking.FilteredNumberCompat;
 import com.android.dialer.common.LogUtil;
 import com.android.dialer.compat.telephony.TelephonyManagerCompat;
 import com.android.dialer.configprovider.ConfigProviderBindings;
 import com.android.dialer.proguard.UsedByReflection;
+import com.android.dialer.util.PermissionsUtil;
 import com.android.dialer.voicemail.settings.VoicemailSettingsFragment;
 import com.android.voicemail.VoicemailClient;
 import java.util.List;
@@ -50,7 +50,7 @@ import java.util.List;
 @UsedByReflection(value = "AndroidManifest-app.xml")
 public class DialerSettingsActivity extends AppCompatPreferenceActivity {
 
-  protected SharedPreferences mPreferences;
+  protected SharedPreferences preferences;
   private boolean migrationStatusOnBuildHeaders;
   private List<Header> headers;
 
@@ -58,7 +58,7 @@ public class DialerSettingsActivity extends AppCompatPreferenceActivity {
   protected void onCreate(Bundle savedInstanceState) {
     LogUtil.enterBlock("DialerSettingsActivity.onCreate");
     super.onCreate(savedInstanceState);
-    mPreferences = PreferenceManager.getDefaultSharedPreferences(this.getApplicationContext());
+    preferences = PreferenceManager.getDefaultSharedPreferences(this.getApplicationContext());
 
     Intent intent = getIntent();
     Uri data = intent.getData();
@@ -170,7 +170,8 @@ public class DialerSettingsActivity extends AppCompatPreferenceActivity {
       Header assistedDialingSettingsHeader = new Header();
       assistedDialingSettingsHeader.titleRes =
           com.android.dialer.assisteddialing.ui.R.string.assisted_dialing_setting_title;
-      assistedDialingSettingsHeader.fragment = AssistedDialingSettingFragment.class.getName();
+      assistedDialingSettingsHeader.intent =
+          new Intent("com.android.dialer.app.settings.SHOW_ASSISTED_DIALING_SETTINGS");
       target.add(assistedDialingSettingsHeader);
     }
 
@@ -191,6 +192,11 @@ public class DialerSettingsActivity extends AppCompatPreferenceActivity {
       LogUtil.i(
           "DialerSettingsActivity.addVoicemailSettings",
           "Dialer voicemail settings not supported by system");
+      return;
+    }
+
+    if (!PermissionsUtil.hasReadPhoneStatePermissions(this)) {
+      LogUtil.i("DialerSettingsActivity.addVoicemailSettings", "Missing READ_PHONE_STATE");
       return;
     }
 

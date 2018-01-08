@@ -8,6 +8,7 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.app \
 	com.android.dialer.app.manifests.activities \
 	com.android.dialer.app.voicemail.error \
+	com.android.dialer.assisteddialing \
 	com.android.dialer.assisteddialing.ui \
 	com.android.dialer.backup \
 	com.android.dialer.binary.aosp.testing \
@@ -37,8 +38,12 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.main.impl \
 	com.android.dialer.notification \
 	com.android.dialer.oem \
+	com.android.dialer.phonelookup.database \
 	com.android.dialer.phonenumberutil \
 	com.android.dialer.postcall \
+	com.android.dialer.precall.impl \
+	com.android.dialer.precall.externalreceiver \
+	com.android.dialer.preferredsim.impl \
 	com.android.dialer.searchfragment.common \
 	com.android.dialer.searchfragment.cp2 \
 	com.android.dialer.searchfragment.list \
@@ -50,6 +55,8 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.theme \
 	com.android.dialer.util \
 	com.android.dialer.voicemail.listui \
+	com.android.dialer.voicemail.listui.menu \
+	com.android.dialer.voicemail.settings \
 	com.android.dialer.voicemailstatus \
 	com.android.dialer.widget \
 	com.android.incallui \
@@ -74,6 +81,7 @@ LOCAL_AAPT_FLAGS := \
 	com.android.incallui.video.impl \
 	com.android.incallui.video.protocol \
 	com.android.newbubble \
+	com.android.phoneapphelper \
 	com.android.voicemail \
 	com.android.voicemail.impl \
 	com.android.voicemail.impl.configui \

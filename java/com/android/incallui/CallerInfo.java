@@ -164,13 +164,13 @@ public class CallerInfo {
 
   public String countryIso;
 
-  private boolean mIsEmergency;
-  private boolean mIsVoiceMail;
+  private boolean isEmergency;
+  private boolean isVoiceMail;
 
   public CallerInfo() {
     // TODO: Move all the basic initialization here?
-    mIsEmergency = false;
-    mIsVoiceMail = false;
+    isEmergency = false;
+    isVoiceMail = false;
     userType = ContactsUtils.USER_TYPE_CURRENT;
   }
 
@@ -192,7 +192,7 @@ public class CallerInfo {
    *
    * @param context the context used to retrieve string constants
    * @param contactRef the URI to attach to this CallerInfo object
-   * @param cursor the first matching object in the cursor is used to build the CallerInfo object.
+   * @param cursor the first object in the cursor is used to build the CallerInfo object.
    * @return the CallerInfo which contains the caller id for the given number. The returned
    *     CallerInfo is null if no number is supplied.
    */
@@ -223,12 +223,16 @@ public class CallerInfo {
     long contactId = 0L;
     int columnIndex;
 
-    // If the cursor has the phone number column, find the one that matches the lookup number in the
-    // URI.
+    // Look for the number
     columnIndex = cursor.getColumnIndex(PhoneLookup.NUMBER);
-    if (columnIndex != -1 && contactRef != null) {
-      cursor = PhoneNumberHelper.getCursorMatchForContactLookupUri(cursor, columnIndex, contactRef);
-      if (cursor != null) {
+    if (columnIndex != -1) {
+      // The Contacts provider ignores special characters in phone numbers when searching for a
+      // contact. For example, number "123" is considered a match with a contact with number "#123".
+      // We need to check whether the result contains a number that truly matches the query and move
+      // the cursor to that position before filling in the fields in CallerInfo.
+      boolean hasNumberMatch =
+          PhoneNumberHelper.updateCursorToMatchContactLookupUri(cursor, columnIndex, contactRef);
+      if (hasNumberMatch) {
         info.phoneNumber = cursor.getString(columnIndex);
       } else {
         return info;
@@ -463,12 +467,12 @@ public class CallerInfo {
 
   /** @return true if the caller info is an emergency number. */
   public boolean isEmergencyNumber() {
-    return mIsEmergency;
+    return isEmergency;
   }
 
   /** @return true if the caller info is a voicemail number. */
   public boolean isVoiceMailNumber() {
-    return mIsVoiceMail;
+    return isVoiceMail;
   }
 
   /**
@@ -481,7 +485,7 @@ public class CallerInfo {
     name = context.getString(R.string.emergency_call_dialog_number_for_display);
     phoneNumber = null;
 
-    mIsEmergency = true;
+    isEmergency = true;
     return this;
   }
 
@@ -493,7 +497,7 @@ public class CallerInfo {
    * @return this instance.
    */
   /* package */ CallerInfo markAsVoiceMail(Context context) {
-    mIsVoiceMail = true;
+    isVoiceMail = true;
 
     try {
       // For voicemail calls, we display the voice mail tag
@@ -510,7 +514,6 @@ public class CallerInfo {
       Log.e(TAG, "Cannot access VoiceMail.", se);
     }
     // TODO: There is no voicemail picture?
-
     // photoResource = android.R.drawable.badge_voicemail;
     return this;
   }
@@ -562,8 +565,8 @@ public class CallerInfo {
           .append("\nshouldSendToVoicemail: " + shouldSendToVoicemail)
           .append("\ncachedPhoto: " + cachedPhoto)
           .append("\nisCachedPhotoCurrent: " + isCachedPhotoCurrent)
-          .append("\nemergency: " + mIsEmergency)
-          .append("\nvoicemail: " + mIsVoiceMail)
+          .append("\nemergency: " + isEmergency)
+          .append("\nvoicemail: " + isVoiceMail)
           .append("\nuserType: " + userType)
           .append(" }")
           .toString();

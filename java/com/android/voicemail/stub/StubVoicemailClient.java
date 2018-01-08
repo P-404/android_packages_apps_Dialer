@@ -76,6 +76,11 @@ public final class StubVoicemailClient implements VoicemailClient {
   }
 
   @Override
+  public boolean isVoicemailDonationAvailable(Context context) {
+    return false;
+  }
+
+  @Override
   public boolean isVoicemailDonationEnabled(Context context, PhoneAccountHandle account) {
     return false;
   }
@@ -106,12 +111,12 @@ public final class StubVoicemailClient implements VoicemailClient {
 
   @Override
   public void addActivationStateListener(ActivationStateListener listener) {
-    throw Assert.createAssertionFailException("should never be called on stub.");
+    // Do nothing
   }
 
   @Override
   public void removeActivationStateListener(ActivationStateListener listener) {
-    throw Assert.createAssertionFailException("should never be called on stub.");
+    // Do nothing
   }
 
   @Override
@@ -125,5 +130,16 @@ public final class StubVoicemailClient implements VoicemailClient {
   }
 
   @Override
-  public void onTosAccepted(Context context) {}
+  public void onTosAccepted(Context context, PhoneAccountHandle account) {}
+
+  @Override
+  public boolean hasAcceptedTos(Context context, PhoneAccountHandle phoneAccountHandle) {
+    return false;
+  }
+
+  @Override
+  @Nullable
+  public String getCarrierConfigString(Context context, PhoneAccountHandle account, String key) {
+    return null;
+  }
 }

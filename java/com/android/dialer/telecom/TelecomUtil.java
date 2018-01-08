@@ -33,9 +33,12 @@ import android.support.v4.content.ContextCompat;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
+import android.telephony.SubscriptionInfo;
+import android.telephony.SubscriptionManager;
 import android.text.TextUtils;
 import android.util.Pair;
 import com.android.dialer.common.LogUtil;
+import com.google.common.base.Optional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -49,7 +52,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public abstract class TelecomUtil {
 
   private static final String TAG = "TelecomUtil";
-  private static boolean sWarningLogged = false;
+  private static boolean warningLogged = false;
 
   private static TelecomUtilImpl instance = new TelecomUtilImpl();
 
@@ -146,10 +149,39 @@ public abstract class TelecomUtil {
   }
 
   /**
+   * @return the {@link SubscriptionInfo} of the SIM if {@code phoneAccountHandle} corresponds to a
+   *     valid SIM. Absent otherwise.
+   */
+  public static Optional<SubscriptionInfo> getSubscriptionInfo(
+      @NonNull Context context, @NonNull PhoneAccountHandle phoneAccountHandle) {
+    if (TextUtils.isEmpty(phoneAccountHandle.getId())) {
+      return Optional.absent();
+    }
+    if (!hasPermission(context, permission.READ_PHONE_STATE)) {
+      return Optional.absent();
+    }
+    SubscriptionManager subscriptionManager = context.getSystemService(SubscriptionManager.class);
+    List<SubscriptionInfo> subscriptionInfos = subscriptionManager.getActiveSubscriptionInfoList();
+    if (subscriptionInfos == null) {
+      return Optional.absent();
+    }
+    for (SubscriptionInfo info : subscriptionInfos) {
+      if (phoneAccountHandle.getId().startsWith(info.getIccId())) {
+        return Optional.of(info);
+      }
+    }
+    return Optional.absent();
+  }
+
+  /**
    * Returns true if there is a dialer managed call in progress. Self managed calls starting from O
    * are not included.
    */
   public static boolean isInManagedCall(Context context) {
+    return instance.isInManagedCall(context);
+  }
+
+  public static boolean isInCall(Context context) {
     return instance.isInCall(context);
   }
 
@@ -261,7 +293,7 @@ public abstract class TelecomUtil {
   @VisibleForTesting()
   public static class TelecomUtilImpl {
 
-    public boolean isInCall(Context context) {
+    public boolean isInManagedCall(Context context) {
       if (hasReadPhoneStatePermission(context)) {
         // The TelecomManager#isInCall method returns true anytime the user is in a call.
         // Starting in O, the APIs include support for self-managed ConnectionServices so that other
@@ -280,6 +312,10 @@ public abstract class TelecomUtil {
       return false;
     }
 
+    public boolean isInCall(Context context) {
+      return hasReadPhoneStatePermission(context) && getTelecomManager(context).isInCall();
+    }
+
     public boolean hasPermission(Context context, String permission) {
       return ContextCompat.checkSelfPermission(context, permission)
           == PackageManager.PERMISSION_GRANTED;
@@ -290,12 +326,12 @@ public abstract class TelecomUtil {
           TextUtils.equals(
               context.getPackageName(), getTelecomManager(context).getDefaultDialerPackage());
       if (result) {
-        sWarningLogged = false;
+        warningLogged = false;
       } else {
-        if (!sWarningLogged) {
+        if (!warningLogged) {
           // Log only once to prevent spam.
           LogUtil.w(TAG, "Dialer is not currently set to be default dialer");
-          sWarningLogged = true;
+          warningLogged = true;
         }
       }
       return result;

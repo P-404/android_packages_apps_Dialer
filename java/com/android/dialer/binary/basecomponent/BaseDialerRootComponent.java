@@ -22,10 +22,14 @@ import com.android.dialer.common.concurrent.DialerExecutorComponent;
 import com.android.dialer.configprovider.ConfigProviderComponent;
 import com.android.dialer.duo.DuoComponent;
 import com.android.dialer.enrichedcall.EnrichedCallComponent;
+import com.android.dialer.feedback.FeedbackComponent;
 import com.android.dialer.main.MainComponent;
 import com.android.dialer.phonelookup.PhoneLookupComponent;
 import com.android.dialer.phonenumbergeoutil.PhoneNumberGeoUtilComponent;
+import com.android.dialer.precall.PreCallComponent;
+import com.android.dialer.preferredsim.suggestion.SimSuggestionComponent;
 import com.android.dialer.simulator.SimulatorComponent;
+import com.android.dialer.spam.SpamComponent;
 import com.android.dialer.storage.StorageComponent;
 import com.android.dialer.strictmode.StrictModeComponent;
 import com.android.incallui.calllocation.CallLocationComponent;
@@ -44,11 +48,15 @@ public interface BaseDialerRootComponent
         DialerExecutorComponent.HasComponent,
         DuoComponent.HasComponent,
         EnrichedCallComponent.HasComponent,
+        FeedbackComponent.HasComponent,
         MainComponent.HasComponent,
         MapsComponent.HasComponent,
         PhoneLookupComponent.HasComponent,
         PhoneNumberGeoUtilComponent.HasComponent,
+        PreCallComponent.HasComponent,
+        SimSuggestionComponent.HasComponent,
         SimulatorComponent.HasComponent,
         StorageComponent.HasComponent,
         StrictModeComponent.HasComponent,
-        VoicemailComponent.HasComponent {}
+        VoicemailComponent.HasComponent,
+        SpamComponent.HasComponent {}

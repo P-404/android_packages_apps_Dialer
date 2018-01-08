@@ -17,6 +17,7 @@
 package com.android.dialer.searchfragment.cp2;
 
 import android.content.ContentResolver;
+import android.content.Context;
 import android.database.CharArrayBuffer;
 import android.database.ContentObserver;
 import android.database.Cursor;
@@ -31,6 +32,7 @@ import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
 import android.support.v4.util.ArraySet;
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import com.android.dialer.searchfragment.common.Projections;
 import com.android.dialer.searchfragment.common.QueryFilteringUtil;
 import java.lang.annotation.Retention;
@@ -38,19 +40,22 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
  * Wrapper for a cursor containing all on device contacts.
  *
  * <p>This cursor removes duplicate phone numbers associated with the same contact and can filter
- * contacts based on a query by calling {@link #filter(String)}.
+ * contacts based on a query by calling {@link #filter(String, Context)}.
  */
 final class ContactFilterCursor implements Cursor {
 
   private final Cursor cursor;
   // List of cursor ids that are valid for displaying after filtering.
   private final List<Integer> queryFilteredPositions = new ArrayList<>();
+  private final ContactTernarySearchTree contactTree;
 
   private int currentPosition = 0;
 
@@ -72,10 +77,12 @@ final class ContactFilterCursor implements Cursor {
   /**
    * @param cursor with projection {@link Projections#CP2_PROJECTION}.
    * @param query to filter cursor results.
+   * @param context of the app.
    */
-  ContactFilterCursor(Cursor cursor, @Nullable String query) {
+  ContactFilterCursor(Cursor cursor, @Nullable String query, Context context) {
     this.cursor = createCursor(cursor);
-    filter(query);
+    contactTree = buildContactSearchTree(context, this.cursor);
+    filter(query, context);
   }
 
   /**
@@ -103,25 +110,24 @@ final class ContactFilterCursor implements Cursor {
   private static Cursor createCursor(Cursor cursor) {
     // Convert cursor rows into Cp2Contacts
     List<Cp2Contact> cp2Contacts = new ArrayList<>();
-    Set<Integer> contactIds = new ArraySet<>();
+    Map<Integer, Integer> contactIdsToPosition = new ArrayMap<>();
     cursor.moveToPosition(-1);
     while (cursor.moveToNext()) {
       Cp2Contact contact = Cp2Contact.fromCursor(cursor);
       cp2Contacts.add(contact);
-      contactIds.add(contact.contactId());
+      contactIdsToPosition.put(contact.contactId(), cursor.getPosition());
     }
     cursor.close();
 
     // Group then combine contact data
     List<Cp2Contact> coalescedContacts = new ArrayList<>();
-    for (Integer contactId : contactIds) {
+    for (Integer contactId : contactIdsToPosition.keySet()) {
       List<Cp2Contact> duplicateContacts = getAllContactsWithContactId(contactId, cp2Contacts);
       coalescedContacts.addAll(coalesceContacts(duplicateContacts));
     }
 
-    // Sort by display name, then build new cursor from coalesced contacts.
-    // We sort the contacts so that they are displayed to the user in lexicographic order.
-    Collections.sort(coalescedContacts, (o1, o2) -> o1.displayName().compareTo(o2.displayName()));
+    // Sort the contacts back into the exact same order they were inside of {@code cursor}
+    Collections.sort(coalescedContacts, (o1, o2) -> compare(contactIdsToPosition, o1, o2));
     MatrixCursor newCursor = new MatrixCursor(Projections.CP2_PROJECTION, coalescedContacts.size());
     for (Cp2Contact contact : coalescedContacts) {
       newCursor.addRow(contact.toCursorRow());
@@ -130,8 +136,8 @@ final class ContactFilterCursor implements Cursor {
   }
 
   private static List<Cp2Contact> coalesceContacts(List<Cp2Contact> contactsWithSameContactId) {
-    String companyName = null;
-    String nickName = null;
+    StringBuilder companyName = new StringBuilder();
+    StringBuilder nickName = new StringBuilder();
     List<Cp2Contact> phoneContacts = new ArrayList<>();
     for (Cp2Contact contact : contactsWithSameContactId) {
       if (contact.mimeType().equals(Phone.CONTENT_ITEM_TYPE)) {
@@ -139,11 +145,11 @@ final class ContactFilterCursor implements Cursor {
       } else if (contact.mimeType().equals(Organization.CONTENT_ITEM_TYPE)) {
         // Since a contact can have more than one company name but they aren't visible to the user
         // in our search UI, we can lazily concatenate them together to make them all searchable.
-        companyName += " " + contact.companyName();
+        companyName.append(" ").append(contact.companyName());
       } else if (contact.mimeType().equals(Nickname.CONTENT_ITEM_TYPE)) {
         // Since a contact can have more than one nickname but they aren't visible to the user
         // in our search UI, we can lazily concatenate them together to make them all searchable.
-        nickName += " " + contact.nickName();
+        nickName.append(" ").append(contact.nickName());
       }
     }
 
@@ -152,9 +158,20 @@ final class ContactFilterCursor implements Cursor {
     List<Cp2Contact> coalescedContacts = new ArrayList<>();
     for (Cp2Contact phoneContact : phoneContacts) {
       coalescedContacts.add(
-          phoneContact.toBuilder().setCompanyName(companyName).setNickName(nickName).build());
+          phoneContact
+              .toBuilder()
+              .setCompanyName(companyName.length() == 0 ? null : companyName.toString())
+              .setNickName(nickName.length() == 0 ? null : nickName.toString())
+              .build());
     }
     return coalescedContacts;
+  }
+
+  private static int compare(
+      Map<Integer, Integer> contactIdsToPosition, Cp2Contact o1, Cp2Contact o2) {
+    int position1 = contactIdsToPosition.get(o1.contactId());
+    int position2 = contactIdsToPosition.get(o2.contactId());
+    return Integer.compare(position1, position2);
   }
 
   private static void removeDuplicatePhoneNumbers(List<Cp2Contact> phoneContacts) {
@@ -219,6 +236,69 @@ final class ContactFilterCursor implements Cursor {
   }
 
   /**
+   * Returns a ternary search trie based on the contact at the cursor's current position with the
+   * following terms inserted:
+   *
+   * <ul>
+   *   <li>Contact's whole display name, company name and nickname.
+   *   <li>The T9 representations of those values
+   *   <li>The T9 initials of those values
+   *   <li>All possible substrings a contact's phone number
+   * </ul>
+   */
+  private static ContactTernarySearchTree buildContactSearchTree(Context context, Cursor cursor) {
+    ContactTernarySearchTree tree = new ContactTernarySearchTree();
+    cursor.moveToPosition(-1);
+    while (cursor.moveToNext()) {
+      int position = cursor.getPosition();
+      Set<String> queryMatches = new ArraySet<>();
+      addMatches(context, queryMatches, cursor.getString(Projections.DISPLAY_NAME));
+      addMatches(context, queryMatches, cursor.getString(Projections.COMPANY_NAME));
+      addMatches(context, queryMatches, cursor.getString(Projections.NICKNAME));
+      for (String query : queryMatches) {
+        tree.put(query, position);
+      }
+      String number = QueryFilteringUtil.digitsOnly(cursor.getString(Projections.PHONE_NUMBER));
+      Set<String> numberSubstrings = new ArraySet<>();
+      numberSubstrings.add(number);
+      for (int start = 0; start < number.length(); start++) {
+        numberSubstrings.add(number.substring(start, number.length()));
+      }
+      for (String substring : numberSubstrings) {
+        tree.put(substring, position);
+      }
+    }
+    return tree;
+  }
+
+  /**
+   * Returns a set containing:
+   *
+   * <ul>
+   *   <li>The white space divided parts of phrase
+   *   <li>The T9 representation of the white space divided parts of phrase
+   *   <li>The T9 representation of the initials (i.e. first character of each part) of phrase
+   * </ul>
+   */
+  private static void addMatches(Context context, Set<String> existingMatches, String phrase) {
+    if (TextUtils.isEmpty(phrase)) {
+      return;
+    }
+    String initials = "";
+    phrase = phrase.toLowerCase(Locale.getDefault());
+    existingMatches.add(phrase);
+    for (String name : phrase.split("\\s")) {
+      if (TextUtils.isEmpty(name)) {
+        continue;
+      }
+      existingMatches.add(name);
+      existingMatches.add(QueryFilteringUtil.getT9Representation(name, context));
+      initials += name.charAt(0);
+    }
+    existingMatches.add(QueryFilteringUtil.getT9Representation(initials, context));
+  }
+
+  /**
    * Filters out contacts that do not match the query.
    *
    * <p>The query can have at least 1 of 3 forms:
@@ -238,29 +318,19 @@ final class ContactFilterCursor implements Cursor {
    *   <li>Its company contains the query
    * </ul>
    */
-  public void filter(@Nullable String query) {
+  public void filter(@Nullable String query, Context context) {
     if (query == null) {
       query = "";
     }
     queryFilteredPositions.clear();
-    query = query.toLowerCase();
-    cursor.moveToPosition(-1);
-
-    while (cursor.moveToNext()) {
-      int position = cursor.getPosition();
-      String number = cursor.getString(Projections.PHONE_NUMBER);
-      String name = cursor.getString(Projections.DISPLAY_NAME);
-      String companyName = cursor.getString(Projections.COMPANY_NAME);
-      String nickName = cursor.getString(Projections.NICKNAME);
-      if (TextUtils.isEmpty(query)
-          || QueryFilteringUtil.nameMatchesT9Query(query, name)
-          || QueryFilteringUtil.numberMatchesNumberQuery(query, number)
-          || QueryFilteringUtil.nameContainsQuery(query, name)
-          || QueryFilteringUtil.nameContainsQuery(query, companyName)
-          || QueryFilteringUtil.nameContainsQuery(query, nickName)) {
-        queryFilteredPositions.add(position);
+    if (TextUtils.isEmpty(query)) {
+      for (int i = 0; i < cursor.getCount(); i++) {
+        queryFilteredPositions.add(i);
       }
+    } else {
+      queryFilteredPositions.addAll(contactTree.get(query.toLowerCase(Locale.getDefault())));
     }
+    Collections.sort(queryFilteredPositions);
     currentPosition = 0;
     cursor.moveToFirst();
   }
