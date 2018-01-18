@@ -22,6 +22,9 @@
        TODO(38502365): Remove this once we're ready to launch the new UI. -->
   <string name="nui_shortcut_name">Phone NUI</string>
 
+  <!-- Title for the activity that dials the phone, when launched directly into the dialpad -->
+  <string name="dialpad_activity_title">Phone Keypad</string>
+
   <!-- The description text for the call log tab. -->
   <string name="main_call_history_tab_description" tools:ignore="UnusedResources">Call history</string>
 
@@ -41,9 +44,6 @@
   <string name="tab_title_speed_dial">Speed Dial</string>
   <!-- Tab text to show users their voicemails  [CHAR LIMIT=10] -->
   <string name="tab_title_voicemail">Voicemail</string>
-
-  <!-- Show users their settings [CHAR LIMIT=20] -->
-  <string name="settings">Settings</string>
-  <!-- Send feedback about the app [CHAR LIMIT=20] -->
-  <string name="main_send_feedback">Send feedback</string>
+  <!-- Tab text to show users their contacts  [CHAR LIMIT=10] -->
+  <string name="tab_title_contacts">Contacts</string>
 </resources>

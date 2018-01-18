@@ -36,9 +36,11 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.lettertile \
 	com.android.dialer.location \
 	com.android.dialer.main.impl \
+	com.android.dialer.main.impl.toolbar \
 	com.android.dialer.notification \
 	com.android.dialer.oem \
 	com.android.dialer.phonelookup.database \
+	com.android.dialer.phonelookup.selector \
 	com.android.dialer.phonenumberutil \
 	com.android.dialer.postcall \
 	com.android.dialer.precall.impl \
@@ -74,6 +76,7 @@ LOCAL_AAPT_FLAGS := \
 	com.android.incallui.hold \
 	com.android.incallui.incall.impl \
 	com.android.incallui.maps.impl \
+	com.android.incallui.rtt.impl \
 	com.android.incallui.sessiondata \
 	com.android.incallui.spam \
 	com.android.incallui.speakerbuttonlogic \

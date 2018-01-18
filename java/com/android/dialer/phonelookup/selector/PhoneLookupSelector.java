@@ -13,11 +13,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License
  */
-package com.android.dialer.phonelookup;
+package com.android.dialer.phonelookup.selector;
 
+import android.content.Context;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
+import android.support.annotation.VisibleForTesting;
+import com.android.dialer.inject.ApplicationContext;
+import com.android.dialer.phonelookup.PhoneLookup;
+import com.android.dialer.phonelookup.PhoneLookupInfo;
+import com.android.dialer.phonelookup.PhoneLookupInfo.BlockedState;
 import com.android.dialer.phonelookup.PhoneLookupInfo.Cp2Info.Cp2ContactInfo;
+import com.android.dialer.phonelookup.PhoneLookupInfo.PeopleApiInfo;
+import com.android.dialer.phonelookup.PhoneLookupInfo.PeopleApiInfo.InfoType;
+import javax.inject.Inject;
 
 /**
  * Prioritizes information from a {@link PhoneLookupInfo}.
@@ -33,12 +42,20 @@ import com.android.dialer.phonelookup.PhoneLookupInfo.Cp2Info.Cp2ContactInfo;
  */
 public final class PhoneLookupSelector {
 
+  private final Context appContext;
+
+  @Inject
+  @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
+  public PhoneLookupSelector(@ApplicationContext Context appContext) {
+    this.appContext = appContext;
+  }
+
   /**
    * Select the name associated with this number. Examples of this are a local contact's name or a
    * business name received from caller ID.
    */
   @NonNull
-  public static String selectName(PhoneLookupInfo phoneLookupInfo) {
+  public String selectName(PhoneLookupInfo phoneLookupInfo) {
     Cp2ContactInfo firstLocalContact = firstLocalContact(phoneLookupInfo);
     if (firstLocalContact != null) {
       String name = firstLocalContact.getName();
@@ -54,7 +71,7 @@ public final class PhoneLookupSelector {
 
   /** Select the photo URI associated with this number. */
   @NonNull
-  public static String selectPhotoUri(PhoneLookupInfo phoneLookupInfo) {
+  public String selectPhotoUri(PhoneLookupInfo phoneLookupInfo) {
     Cp2ContactInfo firstLocalContact = firstLocalContact(phoneLookupInfo);
     if (firstLocalContact != null) {
       String photoUri = firstLocalContact.getPhotoUri();
@@ -66,7 +83,7 @@ public final class PhoneLookupSelector {
   }
 
   /** Select the photo ID associated with this number, or 0 if there is none. */
-  public static long selectPhotoId(PhoneLookupInfo phoneLookupInfo) {
+  public long selectPhotoId(PhoneLookupInfo phoneLookupInfo) {
     Cp2ContactInfo firstLocalContact = firstLocalContact(phoneLookupInfo);
     if (firstLocalContact != null) {
       long photoId = firstLocalContact.getPhotoId();
@@ -79,7 +96,7 @@ public final class PhoneLookupSelector {
 
   /** Select the lookup URI associated with this number. */
   @NonNull
-  public static String selectLookupUri(PhoneLookupInfo phoneLookupInfo) {
+  public String selectLookupUri(PhoneLookupInfo phoneLookupInfo) {
     Cp2ContactInfo firstLocalContact = firstLocalContact(phoneLookupInfo);
     if (firstLocalContact != null) {
       String lookupUri = firstLocalContact.getLookupUri();
@@ -95,7 +112,11 @@ public final class PhoneLookupSelector {
    * set by the user.
    */
   @NonNull
-  public static String selectNumberLabel(PhoneLookupInfo phoneLookupInfo) {
+  public String selectNumberLabel(PhoneLookupInfo phoneLookupInfo) {
+    if (isBlocked(phoneLookupInfo)) {
+      return appContext.getString(R.string.blocked_number_new_call_log_label);
+    }
+
     Cp2ContactInfo firstLocalContact = firstLocalContact(phoneLookupInfo);
     if (firstLocalContact != null) {
       String label = firstLocalContact.getLabel();
@@ -106,16 +127,56 @@ public final class PhoneLookupSelector {
     return "";
   }
 
+  public boolean selectIsBusiness(PhoneLookupInfo phoneLookupInfo) {
+    return phoneLookupInfo.hasPeopleApiInfo()
+        && phoneLookupInfo.getPeopleApiInfo().getInfoType() == InfoType.NEARBY_BUSINESS;
+  }
+
+  public boolean selectIsVoicemail(PhoneLookupInfo unused) {
+    // TODO(twyen): implement
+    return false;
+  }
+
+  public boolean selectIsCp2InfoIncomplete(PhoneLookupInfo phoneLookupInfo) {
+    return phoneLookupInfo.getCp2LocalInfo().getIsIncomplete();
+  }
+
+  /**
+   * Returns true if the number associated with the given {@link PhoneLookupInfo} can be reported as
+   * invalid.
+   *
+   * <p>As we currently report invalid numbers via the People API, only numbers from the People API
+   * can be reported as invalid.
+   */
+  public boolean canReportAsInvalidNumber(PhoneLookupInfo phoneLookupInfo) {
+    // The presence of Cp2ContactInfo means the number associated with the given PhoneLookupInfo
+    // matches that of a Cp2 (local) contact, and PeopleApiInfo will not be used to display
+    // information like name, photo, etc. We should not allow the user to report the number in this
+    // case as the info displayed is not from the People API.
+    if (phoneLookupInfo.getCp2LocalInfo().getCp2ContactInfoCount() > 0) {
+      return false;
+    }
+
+    PeopleApiInfo peopleApiInfo = phoneLookupInfo.getPeopleApiInfo();
+    return peopleApiInfo.getInfoType() != InfoType.UNKNOWN
+        && !peopleApiInfo.getPersonId().isEmpty();
+  }
+
   /**
    * Arbitrarily select the first contact. In the future, it may make sense to display contact
    * information from all contacts with the same number (for example show the name as "Mom, Dad" or
    * show a synthesized photo containing photos of both "Mom" and "Dad").
    */
   @Nullable
-  private static Cp2ContactInfo firstLocalContact(PhoneLookupInfo phoneLookupInfo) {
-    if (phoneLookupInfo.getCp2Info().getCp2ContactInfoCount() > 0) {
-      return phoneLookupInfo.getCp2Info().getCp2ContactInfo(0);
+  private Cp2ContactInfo firstLocalContact(PhoneLookupInfo phoneLookupInfo) {
+    if (phoneLookupInfo.getCp2LocalInfo().getCp2ContactInfoCount() > 0) {
+      return phoneLookupInfo.getCp2LocalInfo().getCp2ContactInfo(0);
     }
     return null;
+  }
+
+  private static boolean isBlocked(PhoneLookupInfo info) {
+    return info.hasDialerBlockedNumberInfo()
+        && info.getDialerBlockedNumberInfo().getBlockedState().equals(BlockedState.BLOCKED);
   }
 }

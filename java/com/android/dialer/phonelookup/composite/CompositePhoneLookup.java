@@ -16,6 +16,8 @@
 
 package com.android.dialer.phonelookup.composite;
 
+import android.content.Context;
+import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
 import android.telecom.Call;
 import com.android.dialer.DialerPhoneNumber;
@@ -32,6 +34,7 @@ import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -60,7 +63,7 @@ public final class CompositePhoneLookup implements PhoneLookup<PhoneLookupInfo> 
    * <p>Note: If any of the dependent lookups fails, the returned future will also fail. If any of
    * the dependent lookups does not complete, the returned future will also not complete.
    */
-  @SuppressWarnings("unchecked")
+  @SuppressWarnings({"unchecked", "rawtype"})
   @Override
   public ListenableFuture<PhoneLookupInfo> lookup(@NonNull Call call) {
     // TODO(zachh): Add short-circuiting logic so that this call is not blocked on low-priority
@@ -86,7 +89,18 @@ public final class CompositePhoneLookup implements PhoneLookup<PhoneLookupInfo> 
   public ListenableFuture<Boolean> isDirty(ImmutableSet<DialerPhoneNumber> phoneNumbers) {
     List<ListenableFuture<Boolean>> futures = new ArrayList<>();
     for (PhoneLookup<?> phoneLookup : phoneLookups) {
-      futures.add(phoneLookup.isDirty(phoneNumbers));
+      futures.add(
+          Futures.transform(
+              phoneLookup.isDirty(phoneNumbers),
+              isDirty -> {
+                LogUtil.v(
+                    "CompositePhoneLookup.isDirty",
+                    "isDirty for %s: %b",
+                    phoneLookup.getClass().getSimpleName(),
+                    isDirty);
+                return isDirty;
+              },
+              MoreExecutors.directExecutor()));
     }
     // Executes all child lookups (possibly in parallel), completing when the first composite lookup
     // which returns "true" completes, and cancels the others.
@@ -163,5 +177,14 @@ public final class CompositePhoneLookup implements PhoneLookup<PhoneLookupInfo> 
     }
     return Futures.transform(
         Futures.allAsList(futures), unused -> null, lightweightExecutorService);
+  }
+
+  @Override
+  @MainThread
+  public void registerContentObservers(
+      Context appContext, ContentObserverCallbacks contentObserverCallbacks) {
+    for (PhoneLookup phoneLookup : phoneLookups) {
+      phoneLookup.registerContentObservers(appContext, contentObserverCallbacks);
+    }
   }
 }

@@ -45,7 +45,11 @@ final class Modules {
 
     maybeAddModuleForVideoOrAudioCall(context, modules, row);
     SharedModules.maybeAddModuleForAddingToContacts(
-        context, modules, row.number(), row.name(), row.lookupUri());
+        context,
+        modules,
+        row.number(),
+        row.numberAttributes().getName(),
+        row.numberAttributes().getLookupUri());
 
     String originalNumber = row.number().getRawInput().getNumber();
     SharedModules.maybeAddModuleForSendingTextMessage(context, modules, originalNumber);
@@ -63,6 +67,8 @@ final class Modules {
     // TODO(zachh): Revisit if DialerContact is the best thing to pass to CallDetails; could
     // it use a ContactPrimaryActionInfo instead?
     addModuleForAccessingCallDetails(context, modules, row);
+
+    modules.add(new DeleteCallLogItemModule(context, row.coalescedIds()));
 
     return modules;
   }
@@ -96,10 +102,8 @@ final class Modules {
 
   private static void addModuleForAccessingCallDetails(
       Context context, List<ContactActionModule> modules, CoalescedRow row) {
-    // TODO(zachh): Load canReportInaccurateNumber in CallDetailsActivity
-    // (see also isPeopleApiSource(sourceType)).
-    boolean canReportInaccurateNumber = false;
-    boolean canSupportAssistedDialing = false; // TODO(zachh): Properly set value.
+    boolean canReportAsInvalidNumber = row.numberAttributes().getCanReportAsInvalidNumber();
+    boolean canSupportAssistedDialing = !TextUtils.isEmpty(row.numberAttributes().getLookupUri());
 
     modules.add(
         new IntentModule(
@@ -108,7 +112,7 @@ final class Modules {
                 context,
                 row.coalescedIds(),
                 createDialerContactFromRow(row),
-                canReportInaccurateNumber,
+                canReportAsInvalidNumber,
                 canSupportAssistedDialing),
             R.string.call_details_menu_label,
             R.drawable.quantum_ic_info_outline_vd_theme_24));
@@ -122,21 +126,21 @@ final class Modules {
         DialerContact.newBuilder()
             .setNumber(originalNumber)
             .setContactType(LetterTileDrawable.TYPE_DEFAULT) // TODO(zachh): Use proper type.
-            .setPhotoId(row.photoId());
+            .setPhotoId(row.numberAttributes().getPhotoId());
 
-    if (!TextUtils.isEmpty(row.name())) {
-      dialerContactBuilder.setNameOrNumber(row.name());
+    if (!TextUtils.isEmpty(row.numberAttributes().getName())) {
+      dialerContactBuilder.setNameOrNumber(row.numberAttributes().getName());
     } else if (!TextUtils.isEmpty(originalNumber)) {
       dialerContactBuilder.setNameOrNumber(originalNumber);
     }
-    if (row.numberTypeLabel() != null) {
-      dialerContactBuilder.setNumberLabel(row.numberTypeLabel());
+    if (row.numberAttributes().hasNumberTypeLabel()) {
+      dialerContactBuilder.setNumberLabel(row.numberAttributes().getNumberTypeLabel());
     }
-    if (row.photoUri() != null) {
-      dialerContactBuilder.setPhotoUri(row.photoUri());
+    if (row.numberAttributes().hasPhotoUri()) {
+      dialerContactBuilder.setPhotoUri(row.numberAttributes().getPhotoUri());
     }
-    if (row.lookupUri() != null) {
-      dialerContactBuilder.setContactUri(row.lookupUri());
+    if (row.numberAttributes().hasLookupUri()) {
+      dialerContactBuilder.setContactUri(row.numberAttributes().getLookupUri());
     }
     if (row.formattedNumber() != null) {
       dialerContactBuilder.setDisplayNumber(row.formattedNumber());
