@@ -19,6 +19,7 @@ package com.android.dialer.calllog.database;
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.provider.CallLog.Calls;
 import com.android.dialer.calllog.database.contract.AnnotatedCallLogContract.AnnotatedCallLog;
 import com.android.dialer.common.LogUtil;
 import java.util.Locale;
@@ -40,6 +41,7 @@ class AnnotatedCallLogDatabaseHelper extends SQLiteOpenHelper {
           + (AnnotatedCallLog.TIMESTAMP + " integer, ")
           + (AnnotatedCallLog.NUMBER + " blob, ")
           + (AnnotatedCallLog.FORMATTED_NUMBER + " text, ")
+          + (AnnotatedCallLog.NUMBER_PRESENTATION + " integer, ")
           + (AnnotatedCallLog.DURATION + " integer, ")
           + (AnnotatedCallLog.DATA_USAGE + " integer, ")
           + (AnnotatedCallLog.IS_READ + " integer, ")
@@ -52,17 +54,23 @@ class AnnotatedCallLogDatabaseHelper extends SQLiteOpenHelper {
           + (AnnotatedCallLog.FEATURES + " integer, ")
           + (AnnotatedCallLog.TRANSCRIPTION + " integer, ")
           + (AnnotatedCallLog.VOICEMAIL_URI + " text, ")
-          + (AnnotatedCallLog.CALL_TYPE + " integer, ")
-          + (AnnotatedCallLog.NUMBER_ATTRIBUTES + " blob ")
+          + (AnnotatedCallLog.CALL_TYPE + " integer not null, ")
+          + (AnnotatedCallLog.NUMBER_ATTRIBUTES + " blob")
           + ");";
 
-  /** Deletes all but the first maxRows rows (by timestamp) to keep the table a manageable size. */
-  // TODO(zachh): Prevent voicemails from being garbage collected.
+  /**
+   * Deletes all but the first maxRows rows (by timestamp, excluding voicemails) to keep the table a
+   * manageable size.
+   */
   private static final String CREATE_TRIGGER_SQL =
       "create trigger delete_old_rows after insert on "
           + AnnotatedCallLog.TABLE
           + " when (select count(*) from "
           + AnnotatedCallLog.TABLE
+          + " where "
+          + AnnotatedCallLog.CALL_TYPE
+          + " != "
+          + Calls.VOICEMAIL_TYPE
           + ") > %d"
           + " begin delete from "
           + AnnotatedCallLog.TABLE
@@ -72,10 +80,18 @@ class AnnotatedCallLogDatabaseHelper extends SQLiteOpenHelper {
           + AnnotatedCallLog._ID
           + " from "
           + AnnotatedCallLog.TABLE
+          + " where "
+          + AnnotatedCallLog.CALL_TYPE
+          + " != "
+          + Calls.VOICEMAIL_TYPE
           + " order by timestamp limit (select count(*)-%d"
           + " from "
           + AnnotatedCallLog.TABLE
-          + " )); end;";
+          + " where "
+          + AnnotatedCallLog.CALL_TYPE
+          + " != "
+          + Calls.VOICEMAIL_TYPE
+          + ")); end;";
 
   private static final String CREATE_INDEX_ON_CALL_TYPE_SQL =
       "create index call_type_index on "

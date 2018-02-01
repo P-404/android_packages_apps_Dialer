@@ -32,6 +32,7 @@ import android.provider.CallLog.Calls;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.RequiresPermission;
+import android.support.v4.os.BuildCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -39,7 +40,6 @@ import android.support.v7.widget.Toolbar;
 import android.view.View;
 import android.widget.Toast;
 import com.android.dialer.CoalescedIds;
-import com.android.dialer.DialerPhoneNumber;
 import com.android.dialer.assisteddialing.ui.AssistedDialingSettingActivity;
 import com.android.dialer.calldetails.CallDetailsEntries.CallDetailsEntry;
 import com.android.dialer.callintent.CallInitiationType;
@@ -52,6 +52,7 @@ import com.android.dialer.common.concurrent.DialerExecutor.FailureListener;
 import com.android.dialer.common.concurrent.DialerExecutor.SuccessListener;
 import com.android.dialer.common.concurrent.DialerExecutor.Worker;
 import com.android.dialer.common.concurrent.DialerExecutorComponent;
+import com.android.dialer.compat.telephony.TelephonyManagerCompat;
 import com.android.dialer.constants.ActivityRequestCodes;
 import com.android.dialer.dialercontact.DialerContact;
 import com.android.dialer.duo.Duo;
@@ -63,13 +64,14 @@ import com.android.dialer.logging.DialerImpression;
 import com.android.dialer.logging.Logger;
 import com.android.dialer.logging.UiAction;
 import com.android.dialer.performancereport.PerformanceReport;
-import com.android.dialer.phonenumberproto.DialerPhoneNumberUtil;
 import com.android.dialer.postcall.PostCall;
 import com.android.dialer.precall.PreCall;
 import com.android.dialer.protos.ProtoParsers;
 import com.google.common.base.Optional;
 import com.google.common.base.Preconditions;
+import com.google.i18n.phonenumbers.NumberParseException;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
+import com.google.i18n.phonenumbers.Phonenumber.PhoneNumber;
 import java.lang.ref.WeakReference;
 import java.util.Collections;
 import java.util.List;
@@ -407,8 +409,14 @@ public class CallDetailsActivity extends AppCompatActivity {
 
     @Override
     public void openAssistedDialingSettings(View unused) {
-      Intent intent = new Intent(getActivity(), AssistedDialingSettingActivity.class);
-      getActivity().startActivity(intent);
+      if (BuildCompat.isAtLeastP()) {
+        Intent callSettingsIntent =
+            new Intent(TelephonyManagerCompat.ACTION_SHOW_ASSISTED_DIALING_SETTINGS);
+        getActivity().startActivity(callSettingsIntent);
+      } else {
+        Intent intent = new Intent(getActivity(), AssistedDialingSettingActivity.class);
+        getActivity().startActivity(intent);
+      }
     }
 
     @Override
@@ -433,10 +441,17 @@ public class CallDetailsActivity extends AppCompatActivity {
 
     @Override
     public Integer doInBackground(@NonNull String phoneNumber) {
-      DialerPhoneNumberUtil dialerPhoneNumberUtil =
-          new DialerPhoneNumberUtil(PhoneNumberUtil.getInstance());
-      DialerPhoneNumber parsedNumber = dialerPhoneNumberUtil.parse(phoneNumber, null);
-      return parsedNumber.getDialerInternalPhoneNumber().getCountryCode();
+      PhoneNumber parsedNumber = null;
+      try {
+        parsedNumber = PhoneNumberUtil.getInstance().parse(phoneNumber, null);
+      } catch (NumberParseException e) {
+        LogUtil.w(
+            "AssistedDialingNumberParseWorker.doInBackground",
+            "couldn't parse phone number: " + LogUtil.sanitizePii(phoneNumber),
+            e);
+        return 0;
+      }
+      return parsedNumber.getCountryCode();
     }
   }
 

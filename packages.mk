@@ -7,7 +7,6 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.about \
 	com.android.dialer.app \
 	com.android.dialer.app.manifests.activities \
-	com.android.dialer.app.voicemail.error \
 	com.android.dialer.assisteddialing \
 	com.android.dialer.assisteddialing.ui \
 	com.android.dialer.backup \
@@ -24,6 +23,7 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.calllog.ui.menu \
 	com.android.dialer.calllogutils \
 	com.android.dialer.clipboard \
+	com.android.dialer.commandline \
 	com.android.dialer.common \
 	com.android.dialer.configprovider \
 	com.android.dialer.contactactions \
@@ -40,7 +40,6 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.notification \
 	com.android.dialer.oem \
 	com.android.dialer.phonelookup.database \
-	com.android.dialer.phonelookup.selector \
 	com.android.dialer.phonenumberutil \
 	com.android.dialer.postcall \
 	com.android.dialer.precall.impl \
@@ -48,6 +47,7 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.preferredsim.impl \
 	com.android.dialer.searchfragment.common \
 	com.android.dialer.searchfragment.cp2 \
+	com.android.dialer.searchfragment.directories \
 	com.android.dialer.searchfragment.list \
 	com.android.dialer.searchfragment.nearbyplaces \
 	com.android.dialer.searchfragment.remote \
@@ -57,6 +57,7 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.theme \
 	com.android.dialer.util \
 	com.android.dialer.voicemail.listui \
+	com.android.dialer.voicemail.listui.error \
 	com.android.dialer.voicemail.listui.menu \
 	com.android.dialer.voicemail.settings \
 	com.android.dialer.voicemailstatus \
@@ -77,6 +78,7 @@ LOCAL_AAPT_FLAGS := \
 	com.android.incallui.incall.impl \
 	com.android.incallui.maps.impl \
 	com.android.incallui.rtt.impl \
+  com.android.incallui.speakeasy \
 	com.android.incallui.sessiondata \
 	com.android.incallui.spam \
 	com.android.incallui.speakerbuttonlogic \

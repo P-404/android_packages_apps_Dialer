@@ -25,19 +25,25 @@ import android.support.v7.app.AppCompatActivity;
 import android.view.ActionProvider;
 import com.android.dialer.common.concurrent.DialerExecutor.Worker;
 import com.android.dialer.common.concurrent.DialerExecutorComponent;
+import com.android.dialer.databasepopulator.BlockedBumberPopulator;
 import com.android.dialer.databasepopulator.CallLogPopulator;
 import com.android.dialer.databasepopulator.ContactsPopulator;
 import com.android.dialer.databasepopulator.VoicemailPopulator;
 import com.android.dialer.enrichedcall.simulator.EnrichedCallSimulatorActivity;
 import com.android.dialer.persistentlog.PersistentLogger;
 import com.android.dialer.preferredsim.PreferredSimFallbackContract;
+import com.android.dialer.simulator.SimulatorComponent;
 import com.android.incallui.rtt.impl.RttChatActivity;
+import com.android.incallui.speakeasy.SpeakEasy;
+import com.android.incallui.speakeasy.SpeakEasyActivity;
+import com.android.incallui.speakeasy.SpeakEasyComponent;
 
 /** Implements the top level simulator menu. */
 final class SimulatorMainMenu {
 
   static ActionProvider getActionProvider(@NonNull AppCompatActivity activity) {
-    return new SimulatorSubMenu(activity.getApplicationContext())
+    SimulatorSubMenu simulatorSubMenu = new SimulatorSubMenu(activity.getApplicationContext());
+    simulatorSubMenu
         .addItem("Voice call", SimulatorVoiceCall.getActionProvider(activity))
         .addItem(
             "IMS video", SimulatorVideoCall.getActionProvider(activity.getApplicationContext()))
@@ -60,11 +66,34 @@ final class SimulatorMainMenu {
             "Enriched call simulator",
             () ->
                 activity.startActivity(
-                    EnrichedCallSimulatorActivity.newIntent(activity.getApplicationContext())));
+                    EnrichedCallSimulatorActivity.newIntent(activity.getApplicationContext())))
+        .addItem(
+            "Enable simulator mode",
+            () ->
+                SimulatorComponent.get(activity.getApplicationContext())
+                    .getSimulator()
+                    .enableSimulatorMode())
+        .addItem(
+            "Disable simulator mode",
+            () ->
+                SimulatorComponent.get(activity.getApplicationContext())
+                    .getSimulator()
+                    .disableSimulatorMode());
+    SpeakEasy speakEasy = SpeakEasyComponent.get(activity.getApplicationContext()).speakEasy();
+    if (speakEasy.isEnabled()) {
+      simulatorSubMenu.addItem(
+          "SpeakEasy call mock", () -> simulateSpeakEasyCallMock(activity.getApplicationContext()));
+    }
+
+    return simulatorSubMenu;
   }
 
   private static void simulateRttCallMock(@NonNull Context context) {
     context.startActivity(new Intent(context, RttChatActivity.class));
+  }
+
+  private static void simulateSpeakEasyCallMock(@NonNull Context context) {
+    context.startActivity(new Intent(context, SpeakEasyActivity.class));
   }
 
   private static void populateDatabase(@NonNull Context context) {
@@ -167,6 +196,7 @@ final class SimulatorMainMenu {
       ContactsPopulator.deleteAllContacts(context);
       CallLogPopulator.deleteAllCallLog(context);
       VoicemailPopulator.deleteAllVoicemail(context);
+      BlockedBumberPopulator.deleteBlockedNumbers(context);
       return null;
     }
   }

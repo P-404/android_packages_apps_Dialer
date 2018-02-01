@@ -532,7 +532,7 @@
   <string name="call_settings_label">Calls</string>
 
   <!-- Label for the blocked numbers settings section [CHAR LIMIT=30] -->
-  <string name="manage_blocked_numbers_label">Call blocking</string>
+  <string name="manage_blocked_numbers_label">Blocked numbers</string>
 
   <!-- Label for the voicemail settings section [CHAR LIMIT=30] -->
   <string name="voicemail_settings_label">Voicemail</string>
@@ -716,4 +716,8 @@
   <!-- If a user deletes a call that has attachments (photo, message, ect) bundled with it, they need
         to be told that they need to go to the SMS app to delete the attachments. [CHAR LIMIT=NONE] -->
   <string name="multiple_ec_data_deleted">Calls deleted. View and delete attachments shared during calls in Messages.</string>
+
+  <!-- Name of launcher shortcut for the new UI main activity.
+       TODO(38502365): Remove this once we're ready to launch the new UI. -->
+  <string translatable="false" name="nui_shortcut_name">Phone NUI</string>
 </resources>
