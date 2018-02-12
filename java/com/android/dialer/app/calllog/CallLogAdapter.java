@@ -54,8 +54,8 @@ import android.view.ViewGroup;
 import com.android.contacts.common.ContactsUtils;
 import com.android.contacts.common.compat.PhoneNumberUtilsCompat;
 import com.android.contacts.common.preference.ContactsPreferences;
-import com.android.dialer.app.DialtactsActivity;
 import com.android.dialer.app.R;
+import com.android.dialer.app.calllog.CallLogFragment.CallLogFragmentListener;
 import com.android.dialer.app.calllog.CallLogGroupBuilder.GroupCreator;
 import com.android.dialer.app.calllog.calllogcache.CallLogCache;
 import com.android.dialer.app.contactinfo.ContactInfoCache;
@@ -68,6 +68,7 @@ import com.android.dialer.callintent.CallIntentBuilder;
 import com.android.dialer.calllogutils.CallbackActionHelper.CallbackAction;
 import com.android.dialer.calllogutils.PhoneCallDetails;
 import com.android.dialer.common.Assert;
+import com.android.dialer.common.FragmentUtils.FragmentUtilListener;
 import com.android.dialer.common.LogUtil;
 import com.android.dialer.common.concurrent.AsyncTaskExecutor;
 import com.android.dialer.common.concurrent.AsyncTaskExecutors;
@@ -84,6 +85,7 @@ import com.android.dialer.logging.ContactSource;
 import com.android.dialer.logging.DialerImpression;
 import com.android.dialer.logging.Logger;
 import com.android.dialer.logging.UiAction;
+import com.android.dialer.main.MainActivityPeer;
 import com.android.dialer.performancereport.PerformanceReport;
 import com.android.dialer.phonenumbercache.CallLogQuery;
 import com.android.dialer.phonenumbercache.ContactInfo;
@@ -379,7 +381,19 @@ public class CallLogAdapter extends GroupingListAdapter
             if (viewHolder.callType == CallLog.Calls.MISSED_TYPE) {
               CallLogAsyncTaskUtil.markCallAsRead(activity, viewHolder.callIds);
               if (activityType == ACTIVITY_TYPE_DIALTACTS) {
-                ((DialtactsActivity) v.getContext()).updateTabUnreadCounts();
+                if (v.getContext() instanceof CallLogFragmentListener) {
+                  ((CallLogFragmentListener) v.getContext()).updateTabUnreadCounts();
+                } else if (v.getContext() instanceof MainActivityPeer.PeerSupplier) {
+                  // This is really bad, but we must do this to prevent a dependency cycle, enforce
+                  // best practices in new code, and avoid refactoring DialtactsActivity.
+                  ((FragmentUtilListener)
+                          ((MainActivityPeer.PeerSupplier) v.getContext()).getPeer())
+                      .getImpl(CallLogFragmentListener.class)
+                      .updateTabUnreadCounts();
+                } else {
+                  throw Assert.createIllegalStateFailException(
+                      "View parent does not implement CallLogFragmentListener");
+                }
               }
             }
             expandViewHolderActions(viewHolder);
