@@ -16,6 +16,7 @@
 
 package com.android.dialer.main.impl;
 
+import android.app.Fragment;
 import android.app.FragmentTransaction;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -25,10 +26,13 @@ import android.support.annotation.Nullable;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.animation.Animation;
 import android.view.animation.Animation.AnimationListener;
 import android.widget.Toast;
+import com.android.contacts.common.dialog.ClearFrequentsDialog;
+import com.android.dialer.app.settings.DialerSettingsActivity;
 import com.android.dialer.callintent.CallInitiationType;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
@@ -36,6 +40,8 @@ import com.android.dialer.constants.ActivityRequestCodes;
 import com.android.dialer.dialpadview.DialpadFragment;
 import com.android.dialer.dialpadview.DialpadFragment.DialpadListener;
 import com.android.dialer.dialpadview.DialpadFragment.OnDialpadQueryChangedListener;
+import com.android.dialer.logging.Logger;
+import com.android.dialer.logging.ScreenEvent;
 import com.android.dialer.main.impl.bottomnav.BottomNavBar;
 import com.android.dialer.main.impl.toolbar.MainToolbar;
 import com.android.dialer.main.impl.toolbar.SearchBarListener;
@@ -58,7 +64,7 @@ import java.util.ArrayList;
  *
  * @see #onBackPressed()
  */
-final class MainSearchController implements SearchBarListener {
+public class MainSearchController implements SearchBarListener {
 
   private static final String KEY_IS_FAB_HIDDEN = "is_fab_hidden";
   private static final String KEY_CURRENT_TAB = "current_tab";
@@ -74,7 +80,7 @@ final class MainSearchController implements SearchBarListener {
   private final FloatingActionButton fab;
   private final MainToolbar toolbar;
 
-  MainSearchController(
+  public MainSearchController(
       MainActivity mainActivity,
       BottomNavBar bottomNav,
       FloatingActionButton fab,
@@ -126,7 +132,15 @@ final class MainSearchController implements SearchBarListener {
     transaction.commit();
   }
 
-  /** Hides the dialpad, reveals the FAB and slides the toolbar back onto the screen. */
+  /**
+   * Hides the dialpad, reveals the FAB and slides the toolbar back onto the screen.
+   *
+   * <p>This method intentionally "hides" and does not "remove" the dialpad in order to preserve its
+   * state (i.e. we call {@link FragmentTransaction#hide(Fragment)} instead of {@link
+   * FragmentTransaction#remove(Fragment)}.
+   *
+   * @see {@link #closeSearch(boolean)} to "remove" the dialpad.
+   */
   private void hideDialpad(boolean animate, boolean bottomNavVisible) {
     Assert.checkArgument(isDialpadVisible());
 
@@ -154,7 +168,7 @@ final class MainSearchController implements SearchBarListener {
           @Override
           public void onAnimationEnd(Animation animation) {
             if (!(mainActivity.isFinishing() || mainActivity.isDestroyed())) {
-              mainActivity.getFragmentManager().beginTransaction().remove(dialpadFragment).commit();
+              mainActivity.getFragmentManager().beginTransaction().hide(dialpadFragment).commit();
             }
           }
 
@@ -222,7 +236,10 @@ final class MainSearchController implements SearchBarListener {
     }
   }
 
-  /** Calls {@link #hideDialpad(boolean, boolean)} and removes the search fragment. */
+  /**
+   * Calls {@link #hideDialpad(boolean, boolean)}, removes the search fragment and clears the
+   * dialpad.
+   */
   private void closeSearch(boolean animate) {
     Assert.checkArgument(isSearchVisible());
     if (isDialpadVisible()) {
@@ -233,9 +250,17 @@ final class MainSearchController implements SearchBarListener {
     showBottomNav();
     toolbar.collapse(animate);
     mainActivity.getFragmentManager().beginTransaction().remove(getSearchFragment()).commit();
+
+    // Clear the dialpad so the phone number isn't persisted between search sessions.
+    getDialpadFragment().clearDialpad();
   }
 
-  @Nullable
+  /**
+   * Returns {@link DialpadFragment}.
+   *
+   * <p>Unless this method is being called for the first time in {@link #openSearch(Optional)} or
+   * {@link #showDialpad(boolean)}, it should never return null.
+   */
   private DialpadFragment getDialpadFragment() {
     return (DialpadFragment)
         mainActivity.getFragmentManager().findFragmentByTag(DIALPAD_FRAGMENT_TAG);
@@ -290,6 +315,15 @@ final class MainSearchController implements SearchBarListener {
     } else if (!isSearchVisible()) {
       transaction.show(getSearchFragment());
     }
+
+    // Add the dialpad fragment but keep it hidden
+    if (getDialpadFragment() == null) {
+      DialpadFragment dialpadFragment = new DialpadFragment();
+      transaction
+          .add(R.id.dialpad_fragment_container, dialpadFragment, DIALPAD_FRAGMENT_TAG)
+          .hide(dialpadFragment);
+    }
+
     transaction.commit();
   }
 
@@ -324,6 +358,20 @@ final class MainSearchController implements SearchBarListener {
     }
   }
 
+  @Override
+  public boolean onMenuItemClicked(MenuItem menuItem) {
+    if (menuItem.getItemId() == R.id.settings) {
+      mainActivity.startActivity(new Intent(mainActivity, DialerSettingsActivity.class));
+      Logger.get(mainActivity).logScreenView(ScreenEvent.Type.SETTINGS, mainActivity);
+      return true;
+    } else if (menuItem.getItemId() == R.id.clear_frequents) {
+      ClearFrequentsDialog.show(mainActivity.getFragmentManager());
+      Logger.get(mainActivity).logScreenView(ScreenEvent.Type.CLEAR_FREQUENTS, mainActivity);
+      return true;
+    }
+    return false;
+  }
+
   public void onVoiceResults(int resultCode, Intent data) {
     if (resultCode == AppCompatActivity.RESULT_OK) {
       ArrayList<String> matches = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
@@ -337,12 +385,6 @@ final class MainSearchController implements SearchBarListener {
       LogUtil.e("MainSearchController.onVoiceResults", "voice search failed");
     }
   }
-
-  @Override
-  public void openSettings() {}
-
-  @Override
-  public void sendFeedback() {}
 
   public void onSaveInstanceState(Bundle bundle) {
     bundle.putBoolean(KEY_IS_FAB_HIDDEN, !fab.isShown());
