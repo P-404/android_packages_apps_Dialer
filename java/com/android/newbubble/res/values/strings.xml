@@ -18,6 +18,8 @@
 <resources>
   <!-- A string for Talkback to read when accessibility user touch bubble. -->
   <string name="a11y_bubble_description">Dialer bubble</string>
+  <!-- A string to describe bubble bottom actions for accessibility user. -->
+  <string name="a11y_bubble_bottom_action_description">Bottom action buttons</string>
   <!-- A string to describe available action for accessibility user. It will be read as "Actions:
     double tap to expand call action menu". -->
   <string name="a11y_bubble_primary_button_expand_action">Expand call action menu</string>
@@ -25,8 +27,8 @@
     double tap to collapse call action menu". -->
   <string name="a11y_bubble_primary_button_collapse_action">Collapse call action menu</string>
 
-  <!-- The label of drag-and-drop target for dismissing bubble. [CHAR LIMIT=10]-->
+  <!-- The label of drag-and-drop target for dismissing bubble. [CHAR LIMIT=20]-->
   <string name="bubble_bottom_action_hide">Hide</string>
-  <!-- The label of drag-and-drop target for ending call. [CHAR LIMIT=10]-->
+  <!-- The label of drag-and-drop target for ending call. [CHAR LIMIT=20]-->
   <string name="bubble_bottom_action_end_call">End call</string>
 </resources>

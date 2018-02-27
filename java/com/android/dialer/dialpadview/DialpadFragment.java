@@ -77,7 +77,6 @@ import com.android.contacts.common.util.StopWatch;
 import com.android.dialer.animation.AnimUtils;
 import com.android.dialer.callintent.CallInitiationType;
 import com.android.dialer.callintent.CallIntentBuilder;
-import com.android.dialer.calllogutils.PhoneAccountUtils;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.FragmentUtils;
 import com.android.dialer.common.LogUtil;
@@ -140,6 +139,7 @@ public class DialpadFragment extends Fragment
   private static final String EXTRA_SEND_EMPTY_FLASH = "com.android.phone.extra.SEND_EMPTY_FLASH";
 
   private static final String PREF_DIGITS_FILLED_BY_INTENT = "pref_digits_filled_by_intent";
+  private static final String PREF_IS_DIALPAD_SLIDE_OUT = "pref_is_dialpad_slide_out";
 
   private static Optional<String> currentCountryIsoForTesting = Optional.absent();
 
@@ -346,6 +346,7 @@ public class DialpadFragment extends Fragment
 
     if (state != null) {
       digitsFilledByIntent = state.getBoolean(PREF_DIGITS_FILLED_BY_INTENT);
+      isDialpadSlideUp = state.getBoolean(PREF_IS_DIALPAD_SLIDE_OUT);
     }
 
     dialpadSlideInDuration = getResources().getInteger(R.integer.dialpad_slide_in_duration);
@@ -777,6 +778,7 @@ public class DialpadFragment extends Fragment
   public void onSaveInstanceState(Bundle outState) {
     super.onSaveInstanceState(outState);
     outState.putBoolean(PREF_DIGITS_FILLED_BY_INTENT, digitsFilledByIntent);
+    outState.putBoolean(PREF_IS_DIALPAD_SLIDE_OUT, isDialpadSlideUp);
   }
 
   @Override
@@ -964,7 +966,7 @@ public class DialpadFragment extends Fragment
         removePreviousDigitIfPossible('1');
 
         List<PhoneAccountHandle> subscriptionAccountHandles =
-            PhoneAccountUtils.getSubscriptionPhoneAccounts(getActivity());
+            TelecomUtil.getSubscriptionPhoneAccounts(getActivity());
         boolean hasUserSelectedDefault =
             subscriptionAccountHandles.contains(
                 TelecomUtil.getDefaultOutgoingPhoneAccount(
@@ -1557,6 +1559,10 @@ public class DialpadFragment extends Fragment
     slideUp.setInterpolator(AnimUtils.EASE_IN);
     slideUp.setDuration(animate ? dialpadSlideInDuration : 0);
     getView().startAnimation(slideUp);
+  }
+
+  public boolean isDialpadSlideUp() {
+    return isDialpadSlideUp;
   }
 
   /** Returns the text in the dialpad */

@@ -73,7 +73,6 @@ import com.android.dialer.animation.AnimUtils;
 import com.android.dialer.animation.AnimationListenerAdapter;
 import com.android.dialer.app.calllog.CallLogActivity;
 import com.android.dialer.app.calllog.CallLogAdapter;
-import com.android.dialer.app.calllog.CallLogAsync;
 import com.android.dialer.app.calllog.CallLogFragment;
 import com.android.dialer.app.calllog.CallLogNotificationsService;
 import com.android.dialer.app.calllog.IntentProvider;
@@ -99,6 +98,7 @@ import com.android.dialer.callintent.CallSpecificAppData;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
 import com.android.dialer.common.UiUtil;
+import com.android.dialer.common.concurrent.DialerExecutorComponent;
 import com.android.dialer.common.concurrent.ThreadUtil;
 import com.android.dialer.compat.CompatUtils;
 import com.android.dialer.configprovider.ConfigProviderBindings;
@@ -119,8 +119,6 @@ import com.android.dialer.logging.Logger;
 import com.android.dialer.logging.LoggingBindings;
 import com.android.dialer.logging.ScreenEvent;
 import com.android.dialer.logging.UiAction;
-import com.android.dialer.main.Main;
-import com.android.dialer.main.MainComponent;
 import com.android.dialer.p13n.inference.P13nRanking;
 import com.android.dialer.p13n.inference.protocol.P13nRanker;
 import com.android.dialer.p13n.inference.protocol.P13nRanker.P13nRefreshCompleteListener;
@@ -798,7 +796,7 @@ public class DialtactsActivity extends TransactionSafeActivity
       Logger.get(this).logScreenView(ScreenEvent.Type.SETTINGS, this);
       return true;
     } else if (resId == R.id.menu_new_ui_launcher_shortcut) {
-      MainComponent.get(this).getMain().createNewUiLauncherShortcut(this);
+      MainComponent.createNewUiLauncherShortcut(this);
       return true;
     }
     return false;
@@ -912,9 +910,13 @@ public class DialtactsActivity extends TransactionSafeActivity
 
   @Override
   public void getLastOutgoingCall(LastOutgoingCallCallback callback) {
-    new CallLogAsync()
-        .getLastOutgoingCall(
-            new CallLogAsync.GetLastOutgoingCallArgs(this, callback::lastOutgoingCall));
+    DialerExecutorComponent.get(this)
+        .dialerExecutorFactory()
+        .createUiTaskBuilder(
+            getFragmentManager(), "Query last phone number", Calls::getLastOutgoingCall)
+        .onSuccess(output -> callback.lastOutgoingCall(output))
+        .build()
+        .executeParallel(this);
   }
 
   /** Callback from child DialpadFragment when the dialpad is shown. */
@@ -1450,18 +1452,16 @@ public class DialtactsActivity extends TransactionSafeActivity
   }
 
   @Override
-  public boolean onSearchListTouch(MotionEvent event) {
+  public void onSearchListTouch() {
     if (isDialpadShown) {
       PerformanceReport.recordClick(UiAction.Type.CLOSE_DIALPAD);
       hideDialpadFragment(true, false);
       if (TextUtils.isEmpty(dialpadQuery)) {
         exitSearchUi();
       }
-      return true;
     } else {
       UiUtil.hideKeyboardFrom(this, searchEditTextLayout);
     }
-    return false;
   }
 
   @Override
@@ -1750,9 +1750,8 @@ public class DialtactsActivity extends TransactionSafeActivity
         simulatorMenuItem.setVisible(false);
       }
 
-      Main dialtacts = MainComponent.get(context).getMain();
       menu.findItem(R.id.menu_new_ui_launcher_shortcut)
-          .setVisible(dialtacts.isNewUiEnabled(context));
+          .setVisible(MainComponent.isNewUiEnabled(context));
 
       super.show();
     }

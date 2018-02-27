@@ -22,16 +22,17 @@ import android.support.v4.util.ArrayMap;
 import android.support.v4.util.ArraySet;
 import com.android.dialer.DialerPhoneNumber;
 import com.android.dialer.common.Assert;
-import com.google.common.base.Optional;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import com.google.i18n.phonenumbers.PhoneNumberUtil;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * Divides a set of {@link DialerPhoneNumber DialerPhoneNumbers} according to those that are valid
  * according to libphonenumber, and those that are not.
+ *
+ * <p>Numbers with post-dial portions are always considered invalid as most systems store E164
+ * numbers which do not support post-dial portions.
  */
 public final class PartitionedNumbers {
   private final ImmutableMap<String, ImmutableSet<DialerPhoneNumber>>
@@ -39,18 +40,27 @@ public final class PartitionedNumbers {
   private final ImmutableMap<String, ImmutableSet<DialerPhoneNumber>>
       invalidNumbersToDialerPhoneNumbers;
 
+  /**
+   * Divides a set of {@link DialerPhoneNumber DialerPhoneNumbers} according to those that are valid
+   * according to libphonenumber, and those that are not.
+   *
+   * <p>Numbers with post-dial portions are always considered invalid as most systems store E164
+   * numbers which do not support post-dial portions.
+   */
   @WorkerThread
   public PartitionedNumbers(@NonNull ImmutableSet<DialerPhoneNumber> dialerPhoneNumbers) {
     Assert.isWorkerThread();
-    DialerPhoneNumberUtil dialerPhoneNumberUtil =
-        new DialerPhoneNumberUtil(PhoneNumberUtil.getInstance());
     Map<String, Set<DialerPhoneNumber>> e164MapBuilder = new ArrayMap<>();
     Map<String, Set<DialerPhoneNumber>> invalidMapBuilder = new ArrayMap<>();
 
     for (DialerPhoneNumber dialerPhoneNumber : dialerPhoneNumbers) {
-      Optional<String> optValidE164 = dialerPhoneNumberUtil.formatToValidE164(dialerPhoneNumber);
-      if (optValidE164.isPresent()) {
-        String validE164 = optValidE164.get();
+      /*
+       * Numbers with post-dial digits are considered valid and can be converted to E164, but their
+       * post dial digits are lost in the process. For example, the normalized version of a number
+       * with a post-dial portion in the contacts database is stored without the post-dial portion.
+       */
+      if (dialerPhoneNumber.getIsValid() && dialerPhoneNumber.getPostDialPortion().isEmpty()) {
+        String validE164 = dialerPhoneNumber.getNormalizedNumber();
         Set<DialerPhoneNumber> currentNumbers = e164MapBuilder.get(validE164);
         if (currentNumbers == null) {
           currentNumbers = new ArraySet<>();
@@ -58,7 +68,7 @@ public final class PartitionedNumbers {
         }
         currentNumbers.add(dialerPhoneNumber);
       } else {
-        String invalidNumber = dialerPhoneNumber.getRawInput().getNumber();
+        String invalidNumber = dialerPhoneNumber.getNormalizedNumber();
         Set<DialerPhoneNumber> currentNumbers = invalidMapBuilder.get(invalidNumber);
         if (currentNumbers == null) {
           currentNumbers = new ArraySet<>();

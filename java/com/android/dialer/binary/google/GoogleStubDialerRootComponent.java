@@ -18,6 +18,7 @@ package com.android.dialer.binary.google;
 
 import com.android.dialer.binary.basecomponent.BaseDialerRootComponent;
 import com.android.dialer.calllog.CallLogModule;
+import com.android.dialer.commandline.CommandLineModule;
 import com.android.dialer.common.concurrent.DialerExecutorModule;
 import com.android.dialer.configprovider.SharedPrefConfigProviderModule;
 import com.android.dialer.duo.stub.StubDuoModule;
@@ -29,6 +30,7 @@ import com.android.dialer.phonenumbergeoutil.impl.PhoneNumberGeoUtilModule;
 import com.android.dialer.precall.impl.PreCallModule;
 import com.android.dialer.preferredsim.suggestion.stub.StubSimSuggestionModule;
 import com.android.dialer.simulator.impl.SimulatorModule;
+import com.android.dialer.simulator.stub.StubSimulatorEnrichedCallModule;
 import com.android.dialer.spam.StubSpamModule;
 import com.android.dialer.storage.StorageModule;
 import com.android.dialer.strictmode.impl.SystemStrictModeModule;
@@ -48,6 +50,7 @@ import javax.inject.Singleton;
   modules = {
     CallLocationModule.class,
     CallLogModule.class,
+    CommandLineModule.class,
     ContextModule.class,
     DialerExecutorModule.class,
     MapsModule.class,
@@ -57,6 +60,7 @@ import javax.inject.Singleton;
     SharedPrefConfigProviderModule.class,
     SimulatorModule.class,
     StorageModule.class,
+    StubSimulatorEnrichedCallModule.class,
     StubDuoModule.class,
     StubEnrichedCallModule.class,
     StubFeedbackModule.class,

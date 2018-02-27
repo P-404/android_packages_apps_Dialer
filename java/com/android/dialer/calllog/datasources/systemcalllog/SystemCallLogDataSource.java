@@ -51,8 +51,10 @@ import com.android.dialer.common.concurrent.Annotations.BackgroundExecutor;
 import com.android.dialer.common.concurrent.ThreadUtil;
 import com.android.dialer.phonenumberproto.DialerPhoneNumberUtil;
 import com.android.dialer.storage.StorageComponent;
+import com.android.dialer.telecom.TelecomUtil;
 import com.android.dialer.theme.R;
 import com.android.dialer.util.PermissionsUtil;
+import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
@@ -194,6 +196,7 @@ public class SystemCallLogDataSource implements CallLogDataSource {
         // recent one.
         .useMostRecentBlob(AnnotatedCallLog.NUMBER)
         .useMostRecentString(AnnotatedCallLog.FORMATTED_NUMBER)
+        .useSingleValueInt(AnnotatedCallLog.NUMBER_PRESENTATION)
         .useMostRecentString(AnnotatedCallLog.GEOCODED_LOCATION)
         .useSingleValueString(AnnotatedCallLog.PHONE_ACCOUNT_COMPONENT_NAME)
         .useSingleValueString(AnnotatedCallLog.PHONE_ACCOUNT_ID)
@@ -235,8 +238,9 @@ public class SystemCallLogDataSource implements CallLogDataSource {
                 new String[] {
                   Calls._ID,
                   Calls.DATE,
-                  Calls.LAST_MODIFIED,
+                  Calls.LAST_MODIFIED, // TODO(a bug): Not available in M
                   Calls.NUMBER,
+                  Calls.NUMBER_PRESENTATION,
                   Calls.TYPE,
                   Calls.COUNTRY_ISO,
                   Calls.DURATION,
@@ -248,8 +252,10 @@ public class SystemCallLogDataSource implements CallLogDataSource {
                   Calls.GEOCODED_LOCATION,
                   Calls.PHONE_ACCOUNT_COMPONENT_NAME,
                   Calls.PHONE_ACCOUNT_ID,
-                  Calls.FEATURES
+                  Calls.FEATURES,
+                  Calls.POST_DIAL_DIGITS // TODO(a bug): Not available in M
                 },
+                // TODO(a bug): LAST_MODIFIED not available on M
                 Calls.LAST_MODIFIED + " > ? AND " + Voicemails.DELETED + " = 0",
                 new String[] {String.valueOf(previousTimestampProcessed)},
                 Calls.LAST_MODIFIED + " DESC LIMIT 1000")) {
@@ -269,6 +275,7 @@ public class SystemCallLogDataSource implements CallLogDataSource {
         int dateColumn = cursor.getColumnIndexOrThrow(Calls.DATE);
         int lastModifiedColumn = cursor.getColumnIndexOrThrow(Calls.LAST_MODIFIED);
         int numberColumn = cursor.getColumnIndexOrThrow(Calls.NUMBER);
+        int presentationColumn = cursor.getColumnIndexOrThrow(Calls.NUMBER_PRESENTATION);
         int typeColumn = cursor.getColumnIndexOrThrow(Calls.TYPE);
         int countryIsoColumn = cursor.getColumnIndexOrThrow(Calls.COUNTRY_ISO);
         int durationsColumn = cursor.getColumnIndexOrThrow(Calls.DURATION);
@@ -282,6 +289,7 @@ public class SystemCallLogDataSource implements CallLogDataSource {
             cursor.getColumnIndexOrThrow(Calls.PHONE_ACCOUNT_COMPONENT_NAME);
         int phoneAccountIdColumn = cursor.getColumnIndexOrThrow(Calls.PHONE_ACCOUNT_ID);
         int featuresColumn = cursor.getColumnIndexOrThrow(Calls.FEATURES);
+        int postDialDigitsColumn = cursor.getColumnIndexOrThrow(Calls.POST_DIAL_DIGITS);
 
         // The cursor orders by LAST_MODIFIED DESC, so the first result is the most recent timestamp
         // processed.
@@ -290,7 +298,18 @@ public class SystemCallLogDataSource implements CallLogDataSource {
           long id = cursor.getLong(idColumn);
           long date = cursor.getLong(dateColumn);
           String numberAsStr = cursor.getString(numberColumn);
-          long type = cursor.getInt(typeColumn);
+          int type;
+          if (cursor.isNull(typeColumn) || (type = cursor.getInt(typeColumn)) == 0) {
+            // CallLog.Calls#TYPE lists the allowed values, which are non-null and non-zero.
+            throw new IllegalStateException("call type is missing");
+          }
+          int presentation;
+          if (cursor.isNull(presentationColumn)
+              || (presentation = cursor.getInt(presentationColumn)) == 0) {
+            // CallLog.Calls#NUMBER_PRESENTATION lists the allowed values, which are non-null and
+            // non-zero.
+            throw new IllegalStateException("presentation is missing");
+          }
           String countryIso = cursor.getString(countryIsoColumn);
           int duration = cursor.getInt(durationsColumn);
           int dataUsage = cursor.getInt(dataUsageColumn);
@@ -302,23 +321,29 @@ public class SystemCallLogDataSource implements CallLogDataSource {
           String phoneAccountComponentName = cursor.getString(phoneAccountComponentColumn);
           String phoneAccountId = cursor.getString(phoneAccountIdColumn);
           int features = cursor.getInt(featuresColumn);
+          String postDialDigits = cursor.getString(postDialDigitsColumn);
 
           ContentValues contentValues = new ContentValues();
           contentValues.put(AnnotatedCallLog.TIMESTAMP, date);
 
           if (!TextUtils.isEmpty(numberAsStr)) {
+            String numberWithPostDialDigits =
+                postDialDigits == null ? numberAsStr : numberAsStr + postDialDigits;
             DialerPhoneNumber dialerPhoneNumber =
-                dialerPhoneNumberUtil.parse(numberAsStr, countryIso);
+                dialerPhoneNumberUtil.parse(numberWithPostDialDigits, countryIso);
 
             contentValues.put(AnnotatedCallLog.NUMBER, dialerPhoneNumber.toByteArray());
-            contentValues.put(
-                AnnotatedCallLog.FORMATTED_NUMBER,
-                PhoneNumberUtils.formatNumber(numberAsStr, countryIso));
-            // TODO(zachh): Need to handle post-dial digits; different on N and M.
+            String formattedNumber =
+                PhoneNumberUtils.formatNumber(numberWithPostDialDigits, countryIso);
+            if (formattedNumber == null) {
+              formattedNumber = numberWithPostDialDigits;
+            }
+            contentValues.put(AnnotatedCallLog.FORMATTED_NUMBER, formattedNumber);
           } else {
             contentValues.put(
                 AnnotatedCallLog.NUMBER, DialerPhoneNumber.getDefaultInstance().toByteArray());
           }
+          contentValues.put(AnnotatedCallLog.NUMBER_PRESENTATION, presentation);
           contentValues.put(AnnotatedCallLog.CALL_TYPE, type);
           contentValues.put(AnnotatedCallLog.IS_READ, isRead);
           contentValues.put(AnnotatedCallLog.NEW, isNew);
@@ -350,7 +375,7 @@ public class SystemCallLogDataSource implements CallLogDataSource {
       String phoneAccountComponentName,
       String phoneAccountId) {
     PhoneAccountHandle phoneAccountHandle =
-        PhoneAccountUtils.getAccount(phoneAccountComponentName, phoneAccountId);
+        TelecomUtil.composePhoneAccountHandle(phoneAccountComponentName, phoneAccountId);
     if (phoneAccountHandle == null) {
       return;
     }
@@ -426,38 +451,43 @@ public class SystemCallLogDataSource implements CallLogDataSource {
       Context appContext, Set<Long> matchingIds) {
     ArraySet<Long> ids = new ArraySet<>();
 
-    String[] questionMarks = new String[matchingIds.size()];
-    Arrays.fill(questionMarks, "?");
-    String whereClause = (Calls._ID + " in (") + TextUtils.join(",", questionMarks) + ")";
-    String[] whereArgs = new String[matchingIds.size()];
-    int i = 0;
-    for (long id : matchingIds) {
-      whereArgs[i++] = String.valueOf(id);
-    }
+    // Batch the select statements into chunks of 999, the maximum size for SQLite selection args.
+    Iterable<List<Long>> batches = Iterables.partition(matchingIds, 999);
+    for (List<Long> idsInBatch : batches) {
+      String[] questionMarks = new String[idsInBatch.size()];
+      Arrays.fill(questionMarks, "?");
 
-    try (Cursor cursor =
-        appContext
-            .getContentResolver()
-            .query(
-                Calls.CONTENT_URI_WITH_VOICEMAIL,
-                new String[] {Calls._ID},
-                whereClause,
-                whereArgs,
-                null)) {
-
-      if (cursor == null) {
-        LogUtil.e("SystemCallLogDataSource.getIdsFromSystemCallLog", "null cursor");
-        return ids;
+      String whereClause = (Calls._ID + " in (") + TextUtils.join(",", questionMarks) + ")";
+      String[] whereArgs = new String[idsInBatch.size()];
+      int i = 0;
+      for (long id : idsInBatch) {
+        whereArgs[i++] = String.valueOf(id);
       }
 
-      if (cursor.moveToFirst()) {
-        int idColumn = cursor.getColumnIndexOrThrow(Calls._ID);
-        do {
-          ids.add(cursor.getLong(idColumn));
-        } while (cursor.moveToNext());
+      try (Cursor cursor =
+          appContext
+              .getContentResolver()
+              .query(
+                  Calls.CONTENT_URI_WITH_VOICEMAIL,
+                  new String[] {Calls._ID},
+                  whereClause,
+                  whereArgs,
+                  null)) {
+
+        if (cursor == null) {
+          LogUtil.e("SystemCallLogDataSource.getIdsFromSystemCallLog", "null cursor");
+          return ids;
+        }
+
+        if (cursor.moveToFirst()) {
+          int idColumn = cursor.getColumnIndexOrThrow(Calls._ID);
+          do {
+            ids.add(cursor.getLong(idColumn));
+          } while (cursor.moveToNext());
+        }
       }
-      return ids;
     }
+    return ids;
   }
 
   private static class CallLogObserver extends ContentObserver {

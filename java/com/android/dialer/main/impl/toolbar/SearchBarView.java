@@ -30,6 +30,7 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import com.android.dialer.animation.AnimUtils;
+import com.android.dialer.common.UiUtil;
 import com.android.dialer.util.DialerUtils;
 import com.google.common.base.Optional;
 
@@ -44,6 +45,9 @@ final class SearchBarView extends FrameLayout {
 
   private SearchBarListener listener;
   private EditText searchBox;
+  // This useful for when the query didn't actually change. We want to avoid making excessive calls
+  // where we can since IPCs can take a long time on slow networks.
+  private boolean skipLatestTextChange;
 
   private int initialHeight;
   private boolean isExpanded;
@@ -66,7 +70,7 @@ final class SearchBarView extends FrameLayout {
     searchBoxCollapsed = findViewById(R.id.search_box_collapsed);
     searchBoxExpanded = findViewById(R.id.search_box_expanded);
 
-    setOnClickListener(v -> expand(true, Optional.absent()));
+    setOnClickListener(v -> listener.onSearchBarClicked());
     findViewById(R.id.voice_search_button).setOnClickListener(v -> voiceSearchClicked());
     findViewById(R.id.search_back_button).setOnClickListener(v -> onSearchBackButtonClicked());
     clearButton.setOnClickListener(v -> onSearchClearButtonClicked());
@@ -78,6 +82,10 @@ final class SearchBarView extends FrameLayout {
   }
 
   private void onSearchBackButtonClicked() {
+    if (!isExpanded) {
+      return;
+    }
+
     listener.onSearchBackButtonClicked();
     collapse(true);
   }
@@ -92,7 +100,7 @@ final class SearchBarView extends FrameLayout {
   }
 
   /** Expand the search bar and populate it with text if any exists. */
-  private void expand(boolean animate, Optional<String> text) {
+  /* package-private */ void expand(boolean animate, Optional<String> text) {
     if (isExpanded) {
       return;
     }
@@ -126,7 +134,7 @@ final class SearchBarView extends FrameLayout {
   }
 
   /** Collapse the search bar and clear it's text. */
-  private void collapse(boolean animate) {
+  /* package-private */ void collapse(boolean animate) {
     if (!isExpanded) {
       return;
     }
@@ -173,8 +181,30 @@ final class SearchBarView extends FrameLayout {
     requestLayout();
   }
 
-  public void setSearchBarListener(SearchBarListener listener) {
+  /* package-private */ void setSearchBarListener(SearchBarListener listener) {
     this.listener = listener;
+  }
+
+  public String getQuery() {
+    return searchBox.getText().toString();
+  }
+
+  public boolean isExpanded() {
+    return isExpanded;
+  }
+
+  public void setQueryWithoutUpdate(String query) {
+    skipLatestTextChange = true;
+    searchBox.setText(query);
+    searchBox.setSelection(searchBox.getText().length());
+  }
+
+  public void hideKeyboard() {
+    UiUtil.hideKeyboardFrom(getContext(), searchBox);
+  }
+
+  public void showKeyboard() {
+    UiUtil.openKeyboardFrom(getContext(), searchBox);
   }
 
   /** Handles logic for text changes in the search box. */
@@ -189,6 +219,11 @@ final class SearchBarView extends FrameLayout {
     @Override
     public void afterTextChanged(Editable s) {
       clearButton.setVisibility(TextUtils.isEmpty(s) ? GONE : VISIBLE);
+      if (skipLatestTextChange) {
+        skipLatestTextChange = false;
+        return;
+      }
+
       listener.onSearchQueryUpdated(s.toString());
     }
   }

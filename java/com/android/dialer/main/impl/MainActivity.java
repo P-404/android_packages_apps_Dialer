@@ -20,36 +20,51 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.provider.CallLog.Calls;
 import android.provider.ContactsContract.QuickContact;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.AppCompatActivity;
-import android.text.TextUtils;
-import android.view.animation.Animation;
-import android.view.animation.Animation.AnimationListener;
+import android.view.View;
 import android.widget.ImageView;
 import com.android.dialer.calllog.ui.NewCallLogFragment;
-import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
+import com.android.dialer.common.concurrent.DialerExecutorComponent;
+import com.android.dialer.compat.CompatUtils;
+import com.android.dialer.constants.ActivityRequestCodes;
 import com.android.dialer.contactsfragment.ContactsFragment;
 import com.android.dialer.contactsfragment.ContactsFragment.Header;
 import com.android.dialer.contactsfragment.ContactsFragment.OnContactSelectedListener;
+import com.android.dialer.database.Database;
 import com.android.dialer.dialpadview.DialpadFragment;
 import com.android.dialer.dialpadview.DialpadFragment.DialpadListener;
 import com.android.dialer.dialpadview.DialpadFragment.LastOutgoingCallCallback;
 import com.android.dialer.dialpadview.DialpadFragment.OnDialpadQueryChangedListener;
 import com.android.dialer.main.impl.BottomNavBar.OnBottomNavTabSelectedListener;
 import com.android.dialer.main.impl.toolbar.MainToolbar;
-import com.android.dialer.main.impl.toolbar.SearchBarListener;
-import com.android.dialer.searchfragment.list.NewSearchFragment;
+import com.android.dialer.postcall.PostCall;
+import com.android.dialer.searchfragment.list.NewSearchFragment.SearchFragmentListener;
+import com.android.dialer.smartdial.util.SmartDialPrefix;
 import com.android.dialer.speeddial.SpeedDialFragment;
+import com.android.dialer.telecom.TelecomUtil;
 import com.android.dialer.voicemail.listui.NewVoicemailFragment;
 
 /** This is the main activity for dialer. It hosts favorites, call log, search, dialpad, etc... */
 public final class MainActivity extends AppCompatActivity
-    implements OnContactSelectedListener, OnDialpadQueryChangedListener, DialpadListener {
+    implements OnContactSelectedListener,
+        OnDialpadQueryChangedListener,
+        DialpadListener,
+        DialpadFragment.HostInterface,
+        SearchFragmentListener {
 
-  private SearchController searchController;
+  private static final String KEY_SAVED_LANGUAGE_CODE = "saved_language_code";
+
+  private MainSearchController searchController;
+
+  /** Language the device was in last time {@link #onSaveInstanceState(Bundle)} was called. */
+  private String savedLanguageCode;
+
+  private View snackbarContainer;
 
   /**
    * @param context Context of the application package implementing MainActivity class.
@@ -66,22 +81,74 @@ public final class MainActivity extends AppCompatActivity
     super.onCreate(savedInstanceState);
     LogUtil.enterBlock("MainActivity.onCreate");
     setContentView(R.layout.main_activity);
-    initLayout();
+    initLayout(savedInstanceState);
+    SmartDialPrefix.initializeNanpSettings(this);
   }
 
-  private void initLayout() {
+  private void initLayout(Bundle savedInstanceState) {
+    snackbarContainer = findViewById(R.id.coordinator_layout);
+
     FloatingActionButton fab = findViewById(R.id.fab);
     fab.setOnClickListener(v -> searchController.showDialpad(true));
 
     MainToolbar toolbar = findViewById(R.id.toolbar);
-    toolbar.setSearchBarListener(new MainSearchBarListener());
-    searchController = new SearchController(fab, toolbar);
     setSupportActionBar(findViewById(R.id.toolbar));
 
-    BottomNavBar navBar = findViewById(R.id.bottom_nav_bar);
-    navBar.setOnTabSelectedListener(new MainBottomNavBarBottomNavTabListener());
-    // TODO(calderwoodra): Implement last tab
-    navBar.selectTab(BottomNavBar.TabIndex.SPEED_DIAL);
+    BottomNavBar bottomNav = findViewById(R.id.bottom_nav_bar);
+    bottomNav.setOnTabSelectedListener(new MainBottomNavBarBottomNavTabListener());
+
+    searchController = new MainSearchController(this, bottomNav, fab, toolbar);
+    toolbar.setSearchBarListener(searchController);
+
+    // Restore our view state if needed, else initialize as if the app opened for the first time
+    if (savedInstanceState != null) {
+      savedLanguageCode = savedInstanceState.getString(KEY_SAVED_LANGUAGE_CODE);
+      searchController.onRestoreInstanceState(savedInstanceState);
+    } else {
+      // TODO(calderwoodra): Implement last tab
+      bottomNav.selectTab(BottomNavBar.TabIndex.SPEED_DIAL);
+    }
+  }
+
+  @Override
+  protected void onResume() {
+    super.onResume();
+    // Start the thread that updates the smart dial database if the activity is recreated with a
+    // language change.
+    boolean forceUpdate = !CompatUtils.getLocale(this).getISO3Language().equals(savedLanguageCode);
+    Database.get(this).getDatabaseHelper(this).startSmartDialUpdateThread(forceUpdate);
+    showPostCallPrompt();
+  }
+
+  private void showPostCallPrompt() {
+    if (TelecomUtil.isInManagedCall(this)) {
+      // No prompt to show if the user is in a call
+      return;
+    }
+
+    if (searchController.isInSearch()) {
+      // Don't show the prompt if we're in the search ui
+      return;
+    }
+
+    PostCall.promptUserForMessageIfNecessary(this, snackbarContainer);
+  }
+
+  @Override
+  protected void onSaveInstanceState(Bundle bundle) {
+    super.onSaveInstanceState(bundle);
+    bundle.putString(KEY_SAVED_LANGUAGE_CODE, CompatUtils.getLocale(this).getISO3Language());
+    searchController.onSaveInstanceState(bundle);
+  }
+
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == ActivityRequestCodes.DIALTACTS_VOICE_SEARCH) {
+      searchController.onVoiceResults(resultCode, data);
+    } else {
+      LogUtil.e("MainActivity.onActivityResult", "Unknown request code: " + requestCode);
+    }
   }
 
   @Override
@@ -93,17 +160,23 @@ public final class MainActivity extends AppCompatActivity
 
   @Override // OnDialpadQueryChangedListener
   public void onDialpadQueryChanged(String query) {
-    // TODO(calderwoodra): update search fragment
+    searchController.onDialpadQueryChanged(query);
   }
 
   @Override // DialpadListener
   public void getLastOutgoingCall(LastOutgoingCallCallback callback) {
-    // TODO(calderwoodra): migrate CallLogAsync class outside of dialer/app and call it here.
+    DialerExecutorComponent.get(this)
+        .dialerExecutorFactory()
+        .createUiTaskBuilder(
+            getFragmentManager(), "Query last phone number", Calls::getLastOutgoingCall)
+        .onSuccess(output -> callback.lastOutgoingCall(output))
+        .build()
+        .executeParallel(this);
   }
 
   @Override // DialpadListener
   public void onDialpadShown() {
-    searchController.getDialpadFragment().slideUp(true);
+    searchController.onDialpadShown();
   }
 
   @Override // DialpadListener
@@ -119,139 +192,20 @@ public final class MainActivity extends AppCompatActivity
     super.onBackPressed();
   }
 
-  /** Search controller for handling all the logic related to hiding/showing search and dialpad. */
-  private final class SearchController {
-
-    private static final String DIALPAD_FRAGMENT_TAG = "dialpad_fragment_tag";
-    private static final String SEARCH_FRAGMENT_TAG = "search_fragment_tag";
-
-    private final FloatingActionButton fab;
-    private final MainToolbar toolbar;
-
-    private boolean isDialpadVisible;
-    private boolean isSearchVisible;
-
-    private SearchController(FloatingActionButton fab, MainToolbar toolbar) {
-      this.fab = fab;
-      this.toolbar = toolbar;
-    }
-
-    /** Shows the dialpad, hides the FAB and slides the toolbar off screen. */
-    public void showDialpad(boolean animate) {
-      Assert.checkArgument(!isDialpadVisible);
-      isDialpadVisible = true;
-      isSearchVisible = true;
-
-      fab.hide();
-      toolbar.slideUp(animate);
-      setTitle(R.string.dialpad_activity_title);
-
-      android.app.FragmentTransaction transaction = getFragmentManager().beginTransaction();
-
-      // Show Search
-      if (getSearchFragment() == null) {
-        NewSearchFragment searchFragment = NewSearchFragment.newInstance(false);
-        transaction.add(R.id.search_fragment_container, searchFragment, SEARCH_FRAGMENT_TAG);
-      } else if (!isSearchVisible) {
-        transaction.show(getSearchFragment());
-      }
-
-      // Show Dialpad
-      if (getDialpadFragment() == null) {
-        DialpadFragment dialpadFragment = new DialpadFragment();
-        transaction.add(R.id.search_fragment_container, dialpadFragment, DIALPAD_FRAGMENT_TAG);
-      } else {
-        DialpadFragment dialpadFragment = getDialpadFragment();
-        transaction.show(dialpadFragment);
-      }
-      transaction.commit();
-    }
-
-    /** Hides the dialpad, reveals the FAB and slides the toolbar back onto the screen. */
-    public void hideDialpad(boolean animate) {
-      Assert.checkArgument(isDialpadVisible);
-      isDialpadVisible = false;
-
-      fab.show();
-      toolbar.slideDown(animate);
-      setTitle(R.string.main_activity_label);
-
-      DialpadFragment dialpadFragment = getDialpadFragment();
-      dialpadFragment.setAnimate(animate);
-      dialpadFragment.slideDown(
-          animate,
-          new AnimationListener() {
-            @Override
-            public void onAnimationStart(Animation animation) {}
-
-            @Override
-            public void onAnimationEnd(Animation animation) {
-              if (!(isFinishing() || isDestroyed())) {
-                getFragmentManager().beginTransaction().remove(dialpadFragment).commit();
-              }
-            }
-
-            @Override
-            public void onAnimationRepeat(Animation animation) {}
-          });
-    }
-
-    /**
-     * Should be called when the user presses the back button.
-     *
-     * @return true if {@link #onBackPressed()} handled to action.
-     */
-    public boolean onBackPressed() {
-      if (isDialpadVisible && !TextUtils.isEmpty(getDialpadFragment().getQuery())) {
-        hideDialpad(true);
-        return true;
-      } else if (isSearchVisible) {
-        closeSearch(true);
-        return true;
-      } else {
-        return false;
-      }
-    }
-
-    /** Calls {@link #hideDialpad(boolean)} and removes the search fragment. */
-    private void closeSearch(boolean animate) {
-      Assert.checkArgument(isSearchVisible);
-      if (isDialpadVisible) {
-        hideDialpad(animate);
-      }
-      getFragmentManager().beginTransaction().remove(getSearchFragment()).commit();
-      isSearchVisible = false;
-    }
-
-    private DialpadFragment getDialpadFragment() {
-      return (DialpadFragment) getFragmentManager().findFragmentByTag(DIALPAD_FRAGMENT_TAG);
-    }
-
-    private NewSearchFragment getSearchFragment() {
-      return (NewSearchFragment) getFragmentManager().findFragmentByTag(SEARCH_FRAGMENT_TAG);
-    }
+  @Override // DialpadFragment.HostInterface
+  public boolean onDialpadSpacerTouchWithEmptyQuery() {
+    // No-op, just let the clicks fall through to the search list
+    return false;
   }
 
-  /**
-   * Implementation of {@link SearchBarListener} that holds the logic for how to handle search bar
-   * events.
-   */
-  private static final class MainSearchBarListener implements SearchBarListener {
+  @Override // SearchFragmentListener
+  public void onSearchListTouch() {
+    searchController.onSearchListTouch();
+  }
 
-    @Override
-    public void onSearchQueryUpdated(String query) {}
-
-    @Override
-    public void onSearchBackButtonClicked() {}
-
-    @Override
-    public void onVoiceButtonClicked(VoiceSearchResultCallback voiceSearchResultCallback) {}
-
-    @Override
-    public void openSettings() {}
-
-    @Override
-    public void sendFeedback() {}
+  @Override // SearchFragmentListener
+  public void onCallPlacedFromSearch() {
+    // TODO(calderwoodra): logging
   }
 
   /**

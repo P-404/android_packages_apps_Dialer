@@ -17,15 +17,11 @@
 package com.android.dialer.phonelookup.blockednumber;
 
 import android.content.Context;
-import android.database.ContentObserver;
 import android.database.Cursor;
-import android.net.Uri;
-import android.support.annotation.MainThread;
-import android.support.annotation.NonNull;
 import android.support.annotation.WorkerThread;
-import android.telecom.Call;
 import android.util.ArraySet;
 import com.android.dialer.DialerPhoneNumber;
+import com.android.dialer.blocking.FilteredNumberCompat;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
 import com.android.dialer.common.concurrent.Annotations.BackgroundExecutor;
@@ -38,15 +34,12 @@ import com.android.dialer.phonelookup.PhoneLookup;
 import com.android.dialer.phonelookup.PhoneLookupInfo;
 import com.android.dialer.phonelookup.PhoneLookupInfo.BlockedState;
 import com.android.dialer.phonelookup.PhoneLookupInfo.DialerBlockedNumberInfo;
-import com.android.dialer.phonenumberproto.DialerPhoneNumberUtil;
 import com.android.dialer.phonenumberproto.PartitionedNumbers;
-import com.android.dialer.telecom.TelecomCallUtil;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
-import com.google.i18n.phonenumbers.PhoneNumberUtil;
 import java.util.Set;
 import javax.inject.Inject;
 
@@ -68,18 +61,12 @@ public final class DialerBlockedNumberPhoneLookup implements PhoneLookup<DialerB
   }
 
   @Override
-  public ListenableFuture<DialerBlockedNumberInfo> lookup(@NonNull Call call) {
+  public ListenableFuture<DialerBlockedNumberInfo> lookup(DialerPhoneNumber dialerPhoneNumber) {
+    if (FilteredNumberCompat.useNewFiltering(appContext)) {
+      return Futures.immediateFuture(DialerBlockedNumberInfo.getDefaultInstance());
+    }
     return executorService.submit(
-        () -> {
-          DialerPhoneNumberUtil dialerPhoneNumberUtil =
-              new DialerPhoneNumberUtil(PhoneNumberUtil.getInstance());
-
-          DialerPhoneNumber number =
-              dialerPhoneNumberUtil.parse(
-                  TelecomCallUtil.getNumber(call),
-                  TelecomCallUtil.getCountryCode(appContext, call).orNull());
-          return queryNumbers(ImmutableSet.of(number)).get(number);
-        });
+        () -> queryNumbers(ImmutableSet.of(dialerPhoneNumber)).get(dialerPhoneNumber));
   }
 
   @Override
@@ -92,6 +79,9 @@ public final class DialerBlockedNumberPhoneLookup implements PhoneLookup<DialerB
   @Override
   public ListenableFuture<ImmutableMap<DialerPhoneNumber, DialerBlockedNumberInfo>>
       getMostRecentInfo(ImmutableMap<DialerPhoneNumber, DialerBlockedNumberInfo> existingInfoMap) {
+    if (FilteredNumberCompat.useNewFiltering(appContext)) {
+      return Futures.immediateFuture(existingInfoMap);
+    }
     LogUtil.enterBlock("DialerBlockedNumberPhoneLookup.getMostRecentPhoneLookupInfo");
     return executorService.submit(() -> queryNumbers(existingInfoMap.keySet()));
   }
@@ -141,11 +131,7 @@ public final class DialerBlockedNumberPhoneLookup implements PhoneLookup<DialerB
     }
 
     Selection rawSelection =
-        Selection.column(FilteredNumberColumns.NUMBER)
-            .in(
-                partitionedNumbers
-                    .invalidNumbers()
-                    .toArray(new String[partitionedNumbers.invalidNumbers().size()]));
+        Selection.column(FilteredNumberColumns.NUMBER).in(partitionedNumbers.invalidNumbers());
     try (Cursor cursor =
         appContext
             .getContentResolver()
@@ -186,26 +172,6 @@ public final class DialerBlockedNumberPhoneLookup implements PhoneLookup<DialerB
         .registerContentObserver(
             FilteredNumber.CONTENT_URI,
             true, // FilteredNumberProvider notifies on the item
-            new FilteredNumberObserver(appContext, contentObserverCallbacks));
-  }
-
-  private static class FilteredNumberObserver extends ContentObserver {
-    private final Context appContext;
-    private final ContentObserverCallbacks contentObserverCallbacks;
-
-    FilteredNumberObserver(Context appContext, ContentObserverCallbacks contentObserverCallbacks) {
-      super(null);
-      this.appContext = appContext;
-      this.contentObserverCallbacks = contentObserverCallbacks;
-    }
-
-    @MainThread
-    @Override
-    @SuppressWarnings("FutureReturnValueIgnored") // never throws.
-    public void onChange(boolean selfChange, Uri uri) {
-      Assert.isMainThread();
-      LogUtil.enterBlock("DialerBlockedNumberPhoneLookup.FilteredNumberObserver.onChange");
-      contentObserverCallbacks.markDirtyAndNotify(appContext);
-    }
+            new MarkDirtyObserver(appContext, contentObserverCallbacks));
   }
 }

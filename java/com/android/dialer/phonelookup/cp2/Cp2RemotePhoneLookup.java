@@ -24,7 +24,6 @@ import android.os.Build.VERSION_CODES;
 import android.provider.ContactsContract;
 import android.provider.ContactsContract.Directory;
 import android.support.annotation.VisibleForTesting;
-import android.telecom.Call;
 import com.android.dialer.DialerPhoneNumber;
 import com.android.dialer.common.LogUtil;
 import com.android.dialer.common.concurrent.Annotations.BackgroundExecutor;
@@ -34,7 +33,6 @@ import com.android.dialer.phonelookup.PhoneLookup;
 import com.android.dialer.phonelookup.PhoneLookupInfo;
 import com.android.dialer.phonelookup.PhoneLookupInfo.Cp2Info;
 import com.android.dialer.phonenumberutil.PhoneNumberHelper;
-import com.android.dialer.telecom.TelecomCallUtil;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.Futures;
@@ -62,15 +60,10 @@ public final class Cp2RemotePhoneLookup implements PhoneLookup<Cp2Info> {
   }
 
   @Override
-  public ListenableFuture<Cp2Info> lookup(Call call) {
-    String number = TelecomCallUtil.getNumber(call);
-    if (number == null) {
-      return Futures.immediateFuture(Cp2Info.getDefaultInstance());
-    }
-
+  public ListenableFuture<Cp2Info> lookup(DialerPhoneNumber dialerPhoneNumber) {
     return Futures.transformAsync(
         queryCp2ForRemoteDirectoryIds(),
-        remoteDirectoryIds -> queryCp2ForRemoteContact(number, remoteDirectoryIds),
+        remoteDirectoryIds -> queryCp2ForRemoteContact(dialerPhoneNumber, remoteDirectoryIds),
         lightweightExecutorService);
   }
 
@@ -114,10 +107,13 @@ public final class Cp2RemotePhoneLookup implements PhoneLookup<Cp2Info> {
   }
 
   private ListenableFuture<Cp2Info> queryCp2ForRemoteContact(
-      String number, List<Long> remoteDirectoryIds) {
+      DialerPhoneNumber dialerPhoneNumber, List<Long> remoteDirectoryIds) {
     if (remoteDirectoryIds.isEmpty()) {
       return Futures.immediateFuture(Cp2Info.getDefaultInstance());
     }
+
+    // Note: This loses country info when number is not valid.
+    String number = dialerPhoneNumber.getNormalizedNumber();
 
     List<ListenableFuture<Cp2Info>> cp2InfoFutures = new ArrayList<>();
     for (long remoteDirectoryId : remoteDirectoryIds) {

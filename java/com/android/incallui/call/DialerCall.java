@@ -394,17 +394,6 @@ public class DialerCall implements VideoTechListener, StateChangedListener, Capa
     return call1.getId().equals(call2.getId());
   }
 
-  public static boolean areSameNumber(DialerCall call1, DialerCall call2) {
-    if (call1 == null && call2 == null) {
-      return true;
-    } else if (call1 == null || call2 == null) {
-      return false;
-    }
-
-    // otherwise compare call Numbers
-    return TextUtils.equals(call1.getNumber(), call2.getNumber());
-  }
-
   public void addListener(DialerCallListener listener) {
     Assert.isMainThread();
     listeners.add(listener);
@@ -525,7 +514,7 @@ public class DialerCall implements VideoTechListener, StateChangedListener, Capa
     Trace.beginSection("DialerCall.updateFromTelecomCall");
     LogUtil.v("DialerCall.updateFromTelecomCall", telecomCall.toString());
 
-    videoTechManager.dispatchCallStateChanged(telecomCall.getState());
+    videoTechManager.dispatchCallStateChanged(telecomCall.getState(), getAccountHandle());
 
     final int translatedState = translateState(telecomCall.getState());
     if (state != State.BLOCKED) {
@@ -1114,7 +1103,7 @@ public class DialerCall implements VideoTechListener, StateChangedListener, Capa
     // perform assisted dialing. PROPERTY_ASSISTED_DIALING_USED indicates assisted dialing took
     // place.
     if (hasProperty(TelephonyManagerCompat.PROPERTY_ASSISTED_DIALING_USED)
-        && Build.VERSION.SDK_INT > ConcreteCreator.BUILD_CODE_CEILING) {
+        && BuildCompat.isAtLeastP()) {
       return true;
     }
     return false;
@@ -1126,10 +1115,26 @@ public class DialerCall implements VideoTechListener, StateChangedListener, Capa
       return null;
     }
 
+    if (BuildCompat.isAtLeastP()) {
+      if (getExtras() == null) {
+        return null;
+      }
+
+      if (getExtras()
+              .getParcelable(TelephonyManagerCompat.EXTRA_ASSISTED_DIALING_TRANSFORMATION_INFO)
+          == null) {
+        return null;
+      }
+
+      // TODO(erfanian): Use the framework transformation info when we can link against it
+      return null;
+    }
+
     if (getIntentExtras().getBundle(TelephonyManagerCompat.ASSISTED_DIALING_EXTRAS) == null) {
       return null;
     }
 
+    // Used in N-OMR1
     return TransformationInfo.newInstanceFromBundle(
         getIntentExtras().getBundle(TelephonyManagerCompat.ASSISTED_DIALING_EXTRAS));
   }
@@ -1258,7 +1263,7 @@ public class DialerCall implements VideoTechListener, StateChangedListener, Capa
 
   public VideoTech getVideoTech() {
     if (videoTech == null) {
-      videoTech = videoTechManager.getVideoTech();
+      videoTech = videoTechManager.getVideoTech(getAccountHandle());
 
       // Only store the first video tech type found to be available during the life of the call.
       if (selectedAvailableVideoTechType == com.android.dialer.logging.VideoTech.Type.NONE) {
@@ -1664,9 +1669,7 @@ public class DialerCall implements VideoTechListener, StateChangedListener, Capa
                   EnrichedCallComponent.get(call.context).getEnrichedCallManager(),
                   call,
                   phoneNumber);
-      if (rcsVideoShare != null) {
-        videoTechs.add(rcsVideoShare);
-      }
+      videoTechs.add(rcsVideoShare);
 
       videoTechs.add(
           new DuoVideoTech(
@@ -1676,16 +1679,17 @@ public class DialerCall implements VideoTechListener, StateChangedListener, Capa
     }
 
     @VisibleForTesting
-    public VideoTech getVideoTech() {
+    public VideoTech getVideoTech(PhoneAccountHandle phoneAccountHandle) {
       if (savedTech == emptyVideoTech) {
         for (VideoTech tech : videoTechs) {
-          if (tech.isAvailable(context)) {
+          if (tech.isAvailable(context, phoneAccountHandle)) {
             savedTech = tech;
             savedTech.becomePrimary();
             break;
           }
         }
-      } else if (savedTech instanceof DuoVideoTech && rcsVideoShare.isAvailable(context)) {
+      } else if (savedTech instanceof DuoVideoTech
+          && rcsVideoShare.isAvailable(context, phoneAccountHandle)) {
         // RCS Video Share will become available after the capability exchange which is slower than
         // Duo reading local contacts for reachability. If Video Share becomes available and we are
         // not in the middle of any session changes, let it take over.
@@ -1697,9 +1701,9 @@ public class DialerCall implements VideoTechListener, StateChangedListener, Capa
     }
 
     @VisibleForTesting
-    public void dispatchCallStateChanged(int newState) {
+    public void dispatchCallStateChanged(int newState, PhoneAccountHandle phoneAccountHandle) {
       for (VideoTech videoTech : videoTechs) {
-        videoTech.onCallStateChanged(context, newState);
+        videoTech.onCallStateChanged(context, newState, phoneAccountHandle);
       }
     }
 

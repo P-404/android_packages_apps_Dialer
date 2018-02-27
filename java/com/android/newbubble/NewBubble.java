@@ -36,7 +36,6 @@ import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.annotation.VisibleForTesting;
-import android.support.v4.graphics.ColorUtils;
 import android.support.v4.os.BuildCompat;
 import android.support.v4.view.animation.LinearOutSlowInInterpolator;
 import android.text.TextUtils;
@@ -57,7 +56,6 @@ import android.view.animation.AnticipateInterpolator;
 import android.view.animation.OvershootInterpolator;
 import android.widget.ImageView;
 import android.widget.Toast;
-import android.widget.ViewAnimator;
 import com.android.dialer.common.LogUtil;
 import com.android.dialer.logging.DialerImpression;
 import com.android.dialer.logging.Logger;
@@ -103,7 +101,7 @@ public class NewBubble {
   @NonNull
   private NewBubbleInfo currentInfo;
 
-  @Visibility private int visibility;
+  @VisibleForTesting @Visibility int visibility;
   private boolean expanded;
   private CharSequence textAfterShow;
   private int collapseEndAction;
@@ -112,23 +110,24 @@ public class NewBubble {
   private AnimatorSet collapseAnimatorSet;
   private Integer overrideGravity;
   @VisibleForTesting AnimatorSet exitAnimatorSet;
+  @VisibleForTesting AnimatorSet enterAnimatorSet;
 
-  private final int primaryIconMoveDistance;
+  private int primaryIconMoveDistance;
   private final int leftBoundary;
   private int savedYPosition = -1;
 
   /** Type of action after bubble collapse */
   @Retention(RetentionPolicy.SOURCE)
   @IntDef({CollapseEnd.NOTHING, CollapseEnd.HIDE})
-  @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-  public @interface CollapseEnd {
+  private @interface CollapseEnd {
     int NOTHING = 0;
     int HIDE = 1;
   }
 
   @Retention(RetentionPolicy.SOURCE)
+  @VisibleForTesting
   @IntDef({Visibility.ENTERING, Visibility.SHOWING, Visibility.EXITING, Visibility.HIDDEN})
-  private @interface Visibility {
+  @interface Visibility {
     int HIDDEN = 0;
     int ENTERING = 1;
     int SHOWING = 2;
@@ -440,7 +439,7 @@ public class NewBubble {
         ObjectAnimator.ofFloat(viewHolder.getPrimaryAvatar(), "alpha", 1);
     ObjectAnimator iconAlphaAnimator =
         ObjectAnimator.ofFloat(viewHolder.getPrimaryIcon(), "alpha", 1);
-    AnimatorSet enterAnimatorSet = new AnimatorSet();
+    enterAnimatorSet = new AnimatorSet();
     enterAnimatorSet.playTogether(
         scaleXAnimator, scaleYAnimator, avatarAlphaAnimator, iconAlphaAnimator);
     enterAnimatorSet.setInterpolator(new OvershootInterpolator());
@@ -524,7 +523,7 @@ public class NewBubble {
   public void updateAvatar(@NonNull Drawable avatar) {
     if (!avatar.equals(currentInfo.getAvatar())) {
       currentInfo = NewBubbleInfo.from(currentInfo).setAvatar(avatar).build();
-      viewHolder.getPrimaryAvatar().setImageDrawable(currentInfo.getAvatar());
+      viewHolder.getPrimaryAvatar().setBackground(currentInfo.getAvatar());
     }
   }
 
@@ -559,7 +558,7 @@ public class NewBubble {
     savedYPosition = -1;
 
     viewHolder
-        .getPrimaryButton()
+        .getPrimaryAvatar()
         .animate()
         .translationZ(
             context
@@ -568,7 +567,7 @@ public class NewBubble {
   }
 
   void onMoveFinish() {
-    viewHolder.getPrimaryButton().animate().translationZ(0);
+    viewHolder.getPrimaryAvatar().animate().translationZ(0);
   }
 
   void primaryButtonClick() {
@@ -608,6 +607,14 @@ public class NewBubble {
 
     // Make bubble non clickable to prevent further buggy actions
     viewHolder.setChildClickable(false);
+
+    if (visibility == Visibility.ENTERING) {
+      enterAnimatorSet.removeAllListeners();
+      enterAnimatorSet.cancel();
+      enterAnimatorSet = null;
+      afterHiding.run();
+      return;
+    }
 
     if (collapseAnimatorSet != null) {
       collapseEndAction = CollapseEnd.HIDE;
@@ -656,15 +663,13 @@ public class NewBubble {
   }
 
   private void update() {
-    // Whole primary button background
-    Drawable backgroundCirle =
-        context.getResources().getDrawable(R.drawable.bubble_shape_circle, context.getTheme());
-    int primaryTint =
-        ColorUtils.compositeColors(
-            context.getColor(R.color.bubble_primary_background_darken),
-            currentInfo.getPrimaryColor());
-    backgroundCirle.mutate().setTint(primaryTint);
-    viewHolder.getPrimaryButton().setBackground(backgroundCirle);
+    // The value may change on display size changed.
+    primaryIconMoveDistance =
+        context.getResources().getDimensionPixelSize(R.dimen.bubble_size)
+            - context.getResources().getDimensionPixelSize(R.dimen.bubble_small_icon_size);
+
+    // Avatar
+    viewHolder.getPrimaryAvatar().setBackground(currentInfo.getAvatar());
 
     // Small icon
     Drawable smallIconBackgroundCircle =
@@ -674,7 +679,6 @@ public class NewBubble {
     smallIconBackgroundCircle.setTint(context.getColor(R.color.bubble_button_color_blue));
     viewHolder.getPrimaryIcon().setBackground(smallIconBackgroundCircle);
     viewHolder.getPrimaryIcon().setImageIcon(currentInfo.getPrimaryIcon());
-    viewHolder.getPrimaryAvatar().setImageDrawable(currentInfo.getAvatar());
 
     updatePrimaryIconAnimation();
     updateButtonStates();
@@ -707,7 +711,7 @@ public class NewBubble {
       button.setCompoundDrawablesWithIntrinsicBounds(action.getIconDrawable(), null, null, null);
     }
     button.setChecked(action.isChecked());
-    button.setEnabled(action.isEnabled());
+    button.setCheckable(action.isCheckable());
     button.setText(action.getName());
     button.setContentDescription(action.getName());
     button.setOnClickListener(v -> doAction(action));
@@ -737,9 +741,6 @@ public class NewBubble {
 
     // Create a new ViewHolder and copy needed info.
     viewHolder = new ViewHolder(oldViewHolder.getRoot().getContext());
-    viewHolder
-        .getPrimaryButton()
-        .setDisplayedChild(oldViewHolder.getPrimaryButton().getDisplayedChild());
     viewHolder.getPrimaryIcon().setX(isDrawingFromRight() ? 0 : primaryIconMoveDistance);
     viewHolder
         .getPrimaryIcon()
@@ -861,6 +862,9 @@ public class NewBubble {
     xValueAnimator.setInterpolator(new LinearOutSlowInInterpolator());
     xValueAnimator.addUpdateListener(
         (valueAnimator) -> {
+          if (windowParams == null) {
+            return;
+          }
           // Update windowParams and the root layout.
           // We can't do ViewPropertyAnimation since it clips children.
           float newX = (float) valueAnimator.getAnimatedValue();
@@ -878,7 +882,7 @@ public class NewBubble {
 
     private NewMoveHandler moveHandler;
     private final NewWindowRoot root;
-    private final ViewAnimator primaryButton;
+    private final View primaryButton;
     private final ImageView primaryIcon;
     private final ImageView primaryAvatar;
     private final View arrow;
@@ -917,18 +921,13 @@ public class NewBubble {
       root.setOnConfigurationChangedListener(
           (configuration) -> {
             if (expanded) {
-              // Collapse immediately without animation
-              if (collapseAnimatorSet != null) {
-                collapseAnimatorSet.removeAllListeners();
-                collapseAnimatorSet.cancel();
-              }
-              setDrawerVisibility(View.GONE);
-              expanded = false;
+              startCollapse(CollapseEnd.NOTHING, false /* shouldRecoverYPosition */);
             }
             // The values in the current MoveHandler may be stale, so replace it. Then ensure the
-            // Window is in bounds
+            // Window is in bounds, and redraw the changes
             moveHandler = new NewMoveHandler(primaryButton, NewBubble.this);
             moveHandler.snapToBounds();
+            replaceViewHolder();
           });
       root.setOnTouchListener(
           (v, event) -> {
@@ -968,7 +967,7 @@ public class NewBubble {
       return root;
     }
 
-    public ViewAnimator getPrimaryButton() {
+    public View getPrimaryButton() {
       return primaryButton;
     }
 
