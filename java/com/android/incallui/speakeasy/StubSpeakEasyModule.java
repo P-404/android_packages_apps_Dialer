@@ -19,10 +19,10 @@ package com.android.incallui.speakeasy;
 import dagger.Binds;
 import dagger.Module;
 
-/** Module which binds {@link SpeakEasyStub}. */
+/** Module which binds {@link SpeakEasyCallManagerStub}. */
 @Module
 public abstract class StubSpeakEasyModule {
 
   @Binds
-  abstract SpeakEasy bindsSpeakEasy(SpeakEasyStub stub);
+  abstract SpeakEasyCallManager bindsSpeakEasy(SpeakEasyCallManagerStub stub);
 }
