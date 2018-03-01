@@ -103,6 +103,8 @@ public class AnswerFragment extends Fragment
   @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
   static final String ARG_CALL_ID = "call_id";
 
+  static final String ARG_IS_RTT_CALL = "is_rtt_call";
+
   @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
   static final String ARG_IS_VIDEO_CALL = "is_video_call";
 
@@ -147,7 +149,7 @@ public class AnswerFragment extends Fragment
   private boolean buttonAcceptClicked;
   private boolean buttonRejectClicked;
   private boolean hasAnimatedEntry;
-  private PrimaryInfo primaryInfo = PrimaryInfo.createEmptyPrimaryInfo();
+  private PrimaryInfo primaryInfo = PrimaryInfo.empty();
   private PrimaryCallState primaryCallState;
   private ArrayList<CharSequence> textResponses;
   private SmsBottomSheetFragment textResponsesFragment;
@@ -344,6 +346,7 @@ public class AnswerFragment extends Fragment
 
   public static AnswerFragment newInstance(
       String callId,
+      boolean isRttCall,
       boolean isVideoCall,
       boolean isVideoUpgradeRequest,
       boolean isSelfManagedCamera,
@@ -351,6 +354,7 @@ public class AnswerFragment extends Fragment
       boolean hasCallOnHold) {
     Bundle bundle = new Bundle();
     bundle.putString(ARG_CALL_ID, Assert.isNotNull(callId));
+    bundle.putBoolean(ARG_IS_RTT_CALL, isRttCall);
     bundle.putBoolean(ARG_IS_VIDEO_CALL, isVideoCall);
     bundle.putBoolean(ARG_IS_VIDEO_UPGRADE_REQUEST, isVideoUpgradeRequest);
     bundle.putBoolean(ARG_IS_SELF_MANAGED_CAMERA, isSelfManagedCamera);
@@ -519,13 +523,13 @@ public class AnswerFragment extends Fragment
       return;
     }
     contactGridManager.setPrimary(primaryInfo);
-    getAnswerMethod().setShowIncomingWillDisconnect(primaryInfo.answeringDisconnectsOngoingCall);
+    getAnswerMethod().setShowIncomingWillDisconnect(primaryInfo.answeringDisconnectsOngoingCall());
     getAnswerMethod()
         .setContactPhoto(
-            primaryInfo.photoType == ContactPhotoType.CONTACT ? primaryInfo.photo : null);
+            primaryInfo.photoType() == ContactPhotoType.CONTACT ? primaryInfo.photo() : null);
     updateDataFragment();
 
-    if (primaryInfo.shouldShowLocation) {
+    if (primaryInfo.shouldShowLocation()) {
       // Hide the avatar to make room for location
       contactGridManager.setAvatarHidden(true);
     }
@@ -558,8 +562,8 @@ public class AnswerFragment extends Fragment
             MultimediaFragment.newInstance(
                 multimediaData,
                 false /* isInteractive */,
-                !primaryInfo.isSpam /* showAvatar */,
-                primaryInfo.isSpam);
+                !primaryInfo.isSpam() /* showAvatar */,
+                primaryInfo.isSpam());
       }
     } else if (shouldShowAvatar()) {
       // Needs Avatar
@@ -663,6 +667,7 @@ public class AnswerFragment extends Fragment
     Trace.beginSection("AnswerFragment.onCreateView");
     Bundle arguments = getArguments();
     Assert.checkState(arguments.containsKey(ARG_CALL_ID));
+    Assert.checkState(arguments.containsKey(ARG_IS_RTT_CALL));
     Assert.checkState(arguments.containsKey(ARG_IS_VIDEO_CALL));
     Assert.checkState(arguments.containsKey(ARG_IS_VIDEO_UPGRADE_REQUEST));
 
@@ -836,6 +841,11 @@ public class AnswerFragment extends Fragment
   }
 
   @Override
+  public boolean isRttCall() {
+    return getArguments().getBoolean(ARG_IS_RTT_CALL);
+  }
+
+  @Override
   public boolean isVideoCall() {
     return getArguments().getBoolean(ARG_IS_VIDEO_CALL);
   }
@@ -848,7 +858,7 @@ public class AnswerFragment extends Fragment
   public void onAnswerProgressUpdate(@FloatRange(from = -1f, to = 1f) float answerProgress) {
     // Don't fade the window background for call waiting or video upgrades. Fading the background
     // shows the system wallpaper which looks bad because on reject we switch to another call.
-    if (primaryCallState.state == State.INCOMING && !isVideoCall()) {
+    if (primaryCallState.state() == State.INCOMING && !isVideoCall()) {
       answerScreenDelegate.updateWindowBackgroundColor(answerProgress);
     }
 
@@ -959,7 +969,7 @@ public class AnswerFragment extends Fragment
         if (hasCallOnHold()) {
           getAnswerMethod()
               .setHintText(getText(R.string.call_incoming_default_label_answer_and_release_third));
-        } else if (primaryCallState.supportsCallOnHold) {
+        } else if (primaryCallState.supportsCallOnHold()) {
           getAnswerMethod()
               .setHintText(getText(R.string.call_incoming_default_label_answer_and_release_second));
         }
@@ -1038,9 +1048,9 @@ public class AnswerFragment extends Fragment
 
   private boolean canRejectCallWithSms() {
     return primaryCallState != null
-        && !(primaryCallState.state == State.DISCONNECTED
-            || primaryCallState.state == State.DISCONNECTING
-            || primaryCallState.state == State.IDLE);
+        && !(primaryCallState.state() == State.DISCONNECTED
+            || primaryCallState.state() == State.DISCONNECTING
+            || primaryCallState.state() == State.IDLE);
   }
 
   private void createInCallScreenDelegate() {
@@ -1057,7 +1067,7 @@ public class AnswerFragment extends Fragment
       return;
     }
 
-    if (!getResources().getBoolean(R.bool.answer_important_call_allowed) || primaryInfo.isSpam) {
+    if (!getResources().getBoolean(R.bool.answer_important_call_allowed) || primaryInfo.isSpam()) {
       importanceBadge.setVisibility(View.GONE);
       return;
     }
@@ -1078,7 +1088,7 @@ public class AnswerFragment extends Fragment
     if (isVideoUpgradeRequest()) {
       return null;
     }
-    return primaryInfo.multimediaData;
+    return primaryInfo.multimediaData();
   }
 
   /** Shows the Avatar image if available. */

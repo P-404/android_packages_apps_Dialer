@@ -26,7 +26,13 @@ public interface MainActivityPeer {
 
   void onActivityResume();
 
+  void onUserLeaveHint();
+
+  void onActivityPause();
+
   void onActivityStop();
+
+  void onActivityDestroyed();
 
   void onNewIntent(Intent intent);
 

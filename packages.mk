@@ -13,6 +13,7 @@ LOCAL_AAPT_FLAGS := \
 	com.android.dialer.binary.aosp.testing \
 	com.android.dialer.binary.google \
 	com.android.dialer.blocking \
+	com.android.dialer.blockreportspam \
 	com.android.dialer.callcomposer \
 	com.android.dialer.callcomposer.camera \
 	com.android.dialer.callcomposer.camera.camerafocus \
@@ -81,6 +82,7 @@ LOCAL_AAPT_FLAGS := \
 	com.android.incallui.incall.impl \
 	com.android.incallui.maps.impl \
 	com.android.incallui.rtt.impl \
+	com.android.incallui.rtt.protocol \
   com.android.incallui.speakeasy \
 	com.android.incallui.sessiondata \
 	com.android.incallui.spam \
