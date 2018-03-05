@@ -75,11 +75,22 @@
     <!-- TODO(a bug): Fix text cropping issue, make text selectable -->
     <TextView
         android:id="@+id/transcription_text"
+        style="@style/PrimaryText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/call_log_entry_photo_text_margin"
+        android:layout_gravity="center_vertical"
+        android:textSize="@dimen/voicemail_transcription_text_size"
+        android:visibility="gone"/>
+
+    <TextView
+        android:id="@+id/transcription_branding"
         style="@style/SecondaryText"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="@dimen/call_log_entry_photo_text_margin"
         android:layout_gravity="center_vertical"
+        android:text="@string/voicemail_transcription_branding_text"
         android:visibility="gone"/>
 
     <com.android.dialer.voicemail.listui.NewVoicemailMediaPlayerView

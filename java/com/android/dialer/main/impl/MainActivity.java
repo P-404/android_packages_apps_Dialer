@@ -18,53 +18,41 @@ package com.android.dialer.main.impl;
 
 import android.content.Context;
 import android.content.Intent;
-import android.net.Uri;
 import android.os.Bundle;
-import android.provider.CallLog.Calls;
-import android.provider.ContactsContract.QuickContact;
-import android.support.design.widget.FloatingActionButton;
-import android.support.v4.app.FragmentTransaction;
-import android.support.v7.app.AppCompatActivity;
-import android.view.View;
-import android.widget.ImageView;
-import com.android.dialer.calllog.ui.NewCallLogFragment;
+import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
-import com.android.dialer.common.concurrent.DialerExecutorComponent;
-import com.android.dialer.compat.CompatUtils;
-import com.android.dialer.constants.ActivityRequestCodes;
-import com.android.dialer.contactsfragment.ContactsFragment;
-import com.android.dialer.contactsfragment.ContactsFragment.Header;
-import com.android.dialer.contactsfragment.ContactsFragment.OnContactSelectedListener;
-import com.android.dialer.database.Database;
-import com.android.dialer.dialpadview.DialpadFragment;
-import com.android.dialer.dialpadview.DialpadFragment.DialpadListener;
-import com.android.dialer.dialpadview.DialpadFragment.LastOutgoingCallCallback;
-import com.android.dialer.dialpadview.DialpadFragment.OnDialpadQueryChangedListener;
-import com.android.dialer.main.impl.BottomNavBar.OnBottomNavTabSelectedListener;
-import com.android.dialer.main.impl.toolbar.MainToolbar;
-import com.android.dialer.postcall.PostCall;
-import com.android.dialer.searchfragment.list.NewSearchFragment.SearchFragmentListener;
-import com.android.dialer.smartdial.util.SmartDialPrefix;
-import com.android.dialer.speeddial.SpeedDialFragment;
-import com.android.dialer.telecom.TelecomUtil;
-import com.android.dialer.voicemail.listui.NewVoicemailFragment;
+import com.android.dialer.configprovider.ConfigProviderComponent;
+import com.android.dialer.interactions.PhoneNumberInteraction.DisambigDialogDismissedListener;
+import com.android.dialer.interactions.PhoneNumberInteraction.InteractionErrorCode;
+import com.android.dialer.interactions.PhoneNumberInteraction.InteractionErrorListener;
+import com.android.dialer.main.MainActivityPeer;
+import com.android.dialer.main.impl.bottomnav.BottomNavBar.TabIndex;
+import com.android.dialer.util.TransactionSafeActivity;
 
 /** This is the main activity for dialer. It hosts favorites, call log, search, dialpad, etc... */
-public final class MainActivity extends AppCompatActivity
-    implements OnContactSelectedListener,
-        OnDialpadQueryChangedListener,
-        DialpadListener,
-        DialpadFragment.HostInterface,
-        SearchFragmentListener {
+// TODO(calderwoodra): Do not extend TransactionSafeActivity after new SpeedDial is launched
+public final class MainActivity extends TransactionSafeActivity
+    implements MainActivityPeer.PeerSupplier,
+        // TODO(calderwoodra): remove these 2 interfaces when we migrate to new speed dial fragment
+        InteractionErrorListener,
+        DisambigDialogDismissedListener {
 
-  private static final String KEY_SAVED_LANGUAGE_CODE = "saved_language_code";
+  private MainActivityPeer activePeer;
 
-  private MainSearchController searchController;
+  public static Intent getShowCallLogIntent(Context context) {
+    return getShowTabIntent(context, TabIndex.CALL_LOG);
+  }
 
-  /** Language the device was in last time {@link #onSaveInstanceState(Bundle)} was called. */
-  private String savedLanguageCode;
-
-  private View snackbarContainer;
+  /** Returns intent that will open MainActivity to the specified tab. */
+  public static Intent getShowTabIntent(Context context, @TabIndex int tabIndex) {
+    if (ConfigProviderComponent.get(context)
+        .getConfigProvider()
+        .getBoolean("nui_peer_enabled", false)) {
+      // TODO(calderwoodra): implement this in NewMainActivityPeer
+      return null;
+    }
+    return OldMainActivityPeer.getShowTabIntent(context, tabIndex);
+  }
 
   /**
    * @param context Context of the application package implementing MainActivity class.
@@ -80,227 +68,78 @@ public final class MainActivity extends AppCompatActivity
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     LogUtil.enterBlock("MainActivity.onCreate");
-    setContentView(R.layout.main_activity);
-    initLayout(savedInstanceState);
-    SmartDialPrefix.initializeNanpSettings(this);
+    if (ConfigProviderComponent.get(this)
+        .getConfigProvider()
+        .getBoolean("nui_peer_enabled", false)) {
+      activePeer = new NewMainActivityPeer(this);
+    } else {
+      activePeer = new OldMainActivityPeer(this);
+    }
+    activePeer.onActivityCreate(savedInstanceState);
   }
 
-  private void initLayout(Bundle savedInstanceState) {
-    snackbarContainer = findViewById(R.id.coordinator_layout);
-
-    FloatingActionButton fab = findViewById(R.id.fab);
-    fab.setOnClickListener(v -> searchController.showDialpad(true));
-
-    MainToolbar toolbar = findViewById(R.id.toolbar);
-    setSupportActionBar(findViewById(R.id.toolbar));
-
-    BottomNavBar bottomNav = findViewById(R.id.bottom_nav_bar);
-    bottomNav.setOnTabSelectedListener(new MainBottomNavBarBottomNavTabListener());
-
-    searchController = new MainSearchController(this, bottomNav, fab, toolbar);
-    toolbar.setSearchBarListener(searchController);
-
-    // Restore our view state if needed, else initialize as if the app opened for the first time
-    if (savedInstanceState != null) {
-      savedLanguageCode = savedInstanceState.getString(KEY_SAVED_LANGUAGE_CODE);
-      searchController.onRestoreInstanceState(savedInstanceState);
-    } else {
-      // TODO(calderwoodra): Implement last tab
-      bottomNav.selectTab(BottomNavBar.TabIndex.SPEED_DIAL);
-    }
+  @Override
+  protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);
+    activePeer.onNewIntent(intent);
   }
 
   @Override
   protected void onResume() {
     super.onResume();
-    // Start the thread that updates the smart dial database if the activity is recreated with a
-    // language change.
-    boolean forceUpdate = !CompatUtils.getLocale(this).getISO3Language().equals(savedLanguageCode);
-    Database.get(this).getDatabaseHelper(this).startSmartDialUpdateThread(forceUpdate);
-    showPostCallPrompt();
+    activePeer.onActivityResume();
   }
 
-  private void showPostCallPrompt() {
-    if (TelecomUtil.isInManagedCall(this)) {
-      // No prompt to show if the user is in a call
-      return;
-    }
-
-    if (searchController.isInSearch()) {
-      // Don't show the prompt if we're in the search ui
-      return;
-    }
-
-    PostCall.promptUserForMessageIfNecessary(this, snackbarContainer);
+  @Override
+  protected void onStop() {
+    super.onStop();
+    activePeer.onActivityStop();
   }
 
   @Override
   protected void onSaveInstanceState(Bundle bundle) {
     super.onSaveInstanceState(bundle);
-    bundle.putString(KEY_SAVED_LANGUAGE_CODE, CompatUtils.getLocale(this).getISO3Language());
-    searchController.onSaveInstanceState(bundle);
+    activePeer.onSaveInstanceState(bundle);
   }
 
   @Override
   protected void onActivityResult(int requestCode, int resultCode, Intent data) {
     super.onActivityResult(requestCode, resultCode, data);
-    if (requestCode == ActivityRequestCodes.DIALTACTS_VOICE_SEARCH) {
-      searchController.onVoiceResults(resultCode, data);
-    } else {
-      LogUtil.e("MainActivity.onActivityResult", "Unknown request code: " + requestCode);
-    }
-  }
-
-  @Override
-  public void onContactSelected(ImageView photo, Uri contactUri, long contactId) {
-    // TODO(calderwoodra): Add impression logging
-    QuickContact.showQuickContact(
-        this, photo, contactUri, QuickContact.MODE_LARGE, null /* excludeMimes */);
-  }
-
-  @Override // OnDialpadQueryChangedListener
-  public void onDialpadQueryChanged(String query) {
-    searchController.onDialpadQueryChanged(query);
-  }
-
-  @Override // DialpadListener
-  public void getLastOutgoingCall(LastOutgoingCallCallback callback) {
-    DialerExecutorComponent.get(this)
-        .dialerExecutorFactory()
-        .createUiTaskBuilder(
-            getFragmentManager(), "Query last phone number", Calls::getLastOutgoingCall)
-        .onSuccess(output -> callback.lastOutgoingCall(output))
-        .build()
-        .executeParallel(this);
-  }
-
-  @Override // DialpadListener
-  public void onDialpadShown() {
-    searchController.onDialpadShown();
-  }
-
-  @Override // DialpadListener
-  public void onCallPlacedFromDialpad() {
-    // TODO(calderwoodra): logging
+    activePeer.onActivityResult(requestCode, resultCode, data);
   }
 
   @Override
   public void onBackPressed() {
-    if (searchController.onBackPressed()) {
+    if (activePeer.onBackPressed()) {
       return;
     }
     super.onBackPressed();
   }
 
-  @Override // DialpadFragment.HostInterface
-  public boolean onDialpadSpacerTouchWithEmptyQuery() {
-    // No-op, just let the clicks fall through to the search list
-    return false;
+  @Override
+  public void interactionError(@InteractionErrorCode int interactionErrorCode) {
+    switch (interactionErrorCode) {
+      case InteractionErrorCode.USER_LEAVING_ACTIVITY:
+        // This is expected to happen if the user exits the activity before the interaction occurs.
+        return;
+      case InteractionErrorCode.CONTACT_NOT_FOUND:
+      case InteractionErrorCode.CONTACT_HAS_NO_NUMBER:
+      case InteractionErrorCode.OTHER_ERROR:
+      default:
+        // All other error codes are unexpected. For example, it should be impossible to start an
+        // interaction with an invalid contact from this activity.
+        throw Assert.createIllegalStateFailException(
+            "PhoneNumberInteraction error: " + interactionErrorCode);
+    }
   }
 
-  @Override // SearchFragmentListener
-  public void onSearchListTouch() {
-    searchController.onSearchListTouch();
+  @Override
+  public void onDisambigDialogDismissed() {
+    // Don't do anything; the app will remain open with favorites tiles displayed.
   }
 
-  @Override // SearchFragmentListener
-  public void onCallPlacedFromSearch() {
-    // TODO(calderwoodra): logging
-  }
-
-  /**
-   * Implementation of {@link OnBottomNavTabSelectedListener} that handles logic for showing each of
-   * the main tabs.
-   */
-  private final class MainBottomNavBarBottomNavTabListener
-      implements OnBottomNavTabSelectedListener {
-
-    private static final String SPEED_DIAL_TAG = "speed_dial";
-    private static final String CALL_LOG_TAG = "call_log";
-    private static final String CONTACTS_TAG = "contacts";
-    private static final String VOICEMAIL_TAG = "voicemail";
-
-    @Override
-    public void onSpeedDialSelected() {
-      hideAllFragments();
-      SpeedDialFragment fragment =
-          (SpeedDialFragment) getFragmentManager().findFragmentByTag(SPEED_DIAL_TAG);
-      if (fragment == null) {
-        getFragmentManager()
-            .beginTransaction()
-            .add(R.id.fragment_container, SpeedDialFragment.newInstance(), SPEED_DIAL_TAG)
-            .commit();
-      } else {
-        getFragmentManager().beginTransaction().show(fragment).commit();
-      }
-    }
-
-    @Override
-    public void onCallLogSelected() {
-      hideAllFragments();
-      NewCallLogFragment fragment =
-          (NewCallLogFragment) getSupportFragmentManager().findFragmentByTag(CALL_LOG_TAG);
-      if (fragment == null) {
-        getSupportFragmentManager()
-            .beginTransaction()
-            .add(R.id.fragment_container, new NewCallLogFragment(), CALL_LOG_TAG)
-            .commit();
-      } else {
-        getSupportFragmentManager().beginTransaction().show(fragment).commit();
-      }
-    }
-
-    @Override
-    public void onContactsSelected() {
-      hideAllFragments();
-      ContactsFragment fragment =
-          (ContactsFragment) getFragmentManager().findFragmentByTag(CONTACTS_TAG);
-      if (fragment == null) {
-        getFragmentManager()
-            .beginTransaction()
-            .add(
-                R.id.fragment_container,
-                ContactsFragment.newInstance(Header.ADD_CONTACT),
-                CONTACTS_TAG)
-            .commit();
-      } else {
-        getFragmentManager().beginTransaction().show(fragment).commit();
-      }
-    }
-
-    @Override
-    public void onVoicemailSelected() {
-      hideAllFragments();
-      NewVoicemailFragment fragment =
-          (NewVoicemailFragment) getSupportFragmentManager().findFragmentByTag(VOICEMAIL_TAG);
-      if (fragment == null) {
-        getSupportFragmentManager()
-            .beginTransaction()
-            .add(R.id.fragment_container, new NewVoicemailFragment(), VOICEMAIL_TAG)
-            .commit();
-      } else {
-        getSupportFragmentManager().beginTransaction().show(fragment).commit();
-      }
-    }
-
-    private void hideAllFragments() {
-      FragmentTransaction supportTransaction = getSupportFragmentManager().beginTransaction();
-      if (getSupportFragmentManager().findFragmentByTag(CALL_LOG_TAG) != null) {
-        supportTransaction.hide(getSupportFragmentManager().findFragmentByTag(CALL_LOG_TAG));
-      }
-      if (getSupportFragmentManager().findFragmentByTag(VOICEMAIL_TAG) != null) {
-        supportTransaction.hide(getSupportFragmentManager().findFragmentByTag(VOICEMAIL_TAG));
-      }
-      supportTransaction.commit();
-
-      android.app.FragmentTransaction transaction = getFragmentManager().beginTransaction();
-      if (getFragmentManager().findFragmentByTag(SPEED_DIAL_TAG) != null) {
-        transaction.hide(getFragmentManager().findFragmentByTag(SPEED_DIAL_TAG));
-      }
-      if (getFragmentManager().findFragmentByTag(CONTACTS_TAG) != null) {
-        transaction.hide(getFragmentManager().findFragmentByTag(CONTACTS_TAG));
-      }
-      transaction.commit();
-    }
+  @Override
+  public MainActivityPeer getPeer() {
+    return activePeer;
   }
 }
