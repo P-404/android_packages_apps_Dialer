@@ -52,6 +52,7 @@ import com.android.dialer.searchfragment.list.NewSearchFragment.SearchFragmentLi
 import com.android.dialer.smartdial.util.SmartDialNameMatcher;
 import com.google.common.base.Optional;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Search controller for handling all the logic related to entering and exiting the search UI.
@@ -82,6 +83,8 @@ public class MainSearchController implements SearchBarListener {
   private final FloatingActionButton fab;
   private final MainToolbar toolbar;
   private final View toolbarShadow;
+
+  private final List<OnSearchShowListener> onSearchShowListenerList = new ArrayList<>();
 
   public MainSearchController(
       MainActivity mainActivity,
@@ -125,11 +128,18 @@ public class MainSearchController implements SearchBarListener {
       // TODO(a bug): zero suggest results aren't actually shown but this enabled the nearby
       // places promo to be shown.
       searchFragment = NewSearchFragment.newInstance(/* showZeroSuggest=*/ true);
-      transaction.add(R.id.fragment_container, searchFragment, SEARCH_FRAGMENT_TAG);
+      transaction.replace(R.id.fragment_container, searchFragment, SEARCH_FRAGMENT_TAG);
+      transaction.addToBackStack(null);
+      transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);
     } else if (!isSearchVisible()) {
       transaction.show(searchFragment);
     }
     searchFragment.setQuery("", CallInitiationType.Type.DIALPAD);
+
+    // Split the transactions so that the dialpad fragment isn't popped off the stack when we exit
+    // search. We do this so that the dialpad actually animates down instead of just disappearing.
+    transaction.commit();
+    transaction = mainActivity.getFragmentManager().beginTransaction();
 
     // Show Dialpad
     if (getDialpadFragment() == null) {
@@ -142,6 +152,8 @@ public class MainSearchController implements SearchBarListener {
       transaction.show(dialpadFragment);
     }
     transaction.commit();
+
+    notifyListenersOnSearchOpen();
   }
 
   /**
@@ -221,21 +233,21 @@ public class MainSearchController implements SearchBarListener {
       if (TextUtils.isEmpty(getDialpadFragment().getQuery())) {
         Logger.get(mainActivity)
             .logImpression(
-                DialerImpression.Type.NUI_TOUCH_DIALPAD_SEARCH_LIST_TO_CLOSE_SEARCH_AND_DIALPAD);
+                DialerImpression.Type.MAIN_TOUCH_DIALPAD_SEARCH_LIST_TO_CLOSE_SEARCH_AND_DIALPAD);
         closeSearch(true);
       } else {
         Logger.get(mainActivity)
-            .logImpression(DialerImpression.Type.NUI_TOUCH_DIALPAD_SEARCH_LIST_TO_HIDE_DIALPAD);
+            .logImpression(DialerImpression.Type.MAIN_TOUCH_DIALPAD_SEARCH_LIST_TO_HIDE_DIALPAD);
         hideDialpad(/* animate=*/ true, /* bottomNavVisible=*/ false);
       }
     } else if (isSearchVisible()) {
       if (TextUtils.isEmpty(toolbar.getQuery())) {
         Logger.get(mainActivity)
-            .logImpression(DialerImpression.Type.NUI_TOUCH_SEARCH_LIST_TO_CLOSE_SEARCH);
+            .logImpression(DialerImpression.Type.MAIN_TOUCH_SEARCH_LIST_TO_CLOSE_SEARCH);
         closeSearch(true);
       } else {
         Logger.get(mainActivity)
-            .logImpression(DialerImpression.Type.NUI_TOUCH_SEARCH_LIST_TO_HIDE_KEYBOARD);
+            .logImpression(DialerImpression.Type.MAIN_TOUCH_SEARCH_LIST_TO_HIDE_KEYBOARD);
         toolbar.hideKeyboard();
       }
     }
@@ -250,7 +262,7 @@ public class MainSearchController implements SearchBarListener {
     if (isDialpadVisible() && !TextUtils.isEmpty(getDialpadFragment().getQuery())) {
       LogUtil.i("MainSearchController.onBackPressed", "Dialpad visible with query");
       Logger.get(mainActivity)
-          .logImpression(DialerImpression.Type.NUI_PRESS_BACK_BUTTON_TO_HIDE_DIALPAD);
+          .logImpression(DialerImpression.Type.MAIN_PRESS_BACK_BUTTON_TO_HIDE_DIALPAD);
       hideDialpad(/* animate=*/ true, /* bottomNavVisible=*/ false);
       return true;
     } else if (isSearchVisible()) {
@@ -258,8 +270,8 @@ public class MainSearchController implements SearchBarListener {
       Logger.get(mainActivity)
           .logImpression(
               isDialpadVisible()
-                  ? DialerImpression.Type.NUI_PRESS_BACK_BUTTON_TO_CLOSE_SEARCH_AND_DIALPAD
-                  : DialerImpression.Type.NUI_PRESS_BACK_BUTTON_TO_CLOSE_SEARCH);
+                  ? DialerImpression.Type.MAIN_PRESS_BACK_BUTTON_TO_CLOSE_SEARCH_AND_DIALPAD
+                  : DialerImpression.Type.MAIN_PRESS_BACK_BUTTON_TO_CLOSE_SEARCH);
       closeSearch(true);
       return true;
     } else {
@@ -282,12 +294,23 @@ public class MainSearchController implements SearchBarListener {
     showBottomNav();
     toolbar.collapse(animate);
     toolbarShadow.setVisibility(View.GONE);
-    mainActivity.getFragmentManager().beginTransaction().remove(getSearchFragment()).commit();
+    mainActivity.getFragmentManager().popBackStack();
 
     // Clear the dialpad so the phone number isn't persisted between search sessions.
-    if (getDialpadFragment() != null) {
-      getDialpadFragment().clearDialpad();
+    DialpadFragment dialpadFragment = getDialpadFragment();
+    if (dialpadFragment != null) {
+      // Temporarily disable accessibility when we clear the dialpad, since it should be
+      // invisible and should not announce anything.
+      dialpadFragment
+          .getDigitsWidget()
+          .setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+      dialpadFragment.clearDialpad();
+      dialpadFragment
+          .getDigitsWidget()
+          .setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_AUTO);
     }
+
+    notifyListenersOnSearchClose();
   }
 
   @Nullable
@@ -328,7 +351,7 @@ public class MainSearchController implements SearchBarListener {
   @Override
   public void onSearchBarClicked() {
     LogUtil.enterBlock("MainSearchController.onSearchBarClicked");
-    Logger.get(mainActivity).logImpression(DialerImpression.Type.NUI_CLICK_SEARCH_BAR);
+    Logger.get(mainActivity).logImpression(DialerImpression.Type.MAIN_CLICK_SEARCH_BAR);
     openSearch(Optional.absent());
   }
 
@@ -348,7 +371,9 @@ public class MainSearchController implements SearchBarListener {
       // TODO(a bug): zero suggest results aren't actually shown but this enabled the nearby
       // places promo to be shown.
       searchFragment = NewSearchFragment.newInstance(true);
-      transaction.add(R.id.fragment_container, searchFragment, SEARCH_FRAGMENT_TAG);
+      transaction.replace(R.id.fragment_container, searchFragment, SEARCH_FRAGMENT_TAG);
+      transaction.addToBackStack(null);
+      transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);
     } else if (!isSearchVisible()) {
       transaction.show(getSearchFragment());
     }
@@ -356,6 +381,8 @@ public class MainSearchController implements SearchBarListener {
     searchFragment.setQuery(
         query.isPresent() ? query.get() : "", CallInitiationType.Type.REGULAR_SEARCH);
     transaction.commit();
+
+    notifyListenersOnSearchOpen();
   }
 
   @Override
@@ -384,7 +411,8 @@ public class MainSearchController implements SearchBarListener {
 
   @Override
   public void onVoiceButtonClicked(VoiceSearchResultCallback voiceSearchResultCallback) {
-    Logger.get(mainActivity).logImpression(DialerImpression.Type.NUI_CLICK_SEARCH_BAR_VOICE_BUTTON);
+    Logger.get(mainActivity)
+        .logImpression(DialerImpression.Type.MAIN_CLICK_SEARCH_BAR_VOICE_BUTTON);
     try {
       Intent voiceIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
       mainActivity.startActivityForResult(voiceIntent, ActivityRequestCodes.DIALTACTS_VOICE_SEARCH);
@@ -454,5 +482,32 @@ public class MainSearchController implements SearchBarListener {
     if (savedInstanceState.getBoolean(KEY_IS_TOOLBAR_SLIDE_UP, false)) {
       toolbar.slideUp(false);
     }
+  }
+
+  public void addOnSearchShowListener(OnSearchShowListener listener) {
+    onSearchShowListenerList.add(listener);
+  }
+
+  public void removeOnSearchShowListener(OnSearchShowListener listener) {
+    onSearchShowListenerList.remove(listener);
+  }
+
+  private void notifyListenersOnSearchOpen() {
+    for (OnSearchShowListener listener : onSearchShowListenerList) {
+      listener.onSearchOpen();
+    }
+  }
+
+  private void notifyListenersOnSearchClose() {
+    for (OnSearchShowListener listener : onSearchShowListenerList) {
+      listener.onSearchClose();
+    }
+  }
+
+  /** Listener for search fragment show states change */
+  public interface OnSearchShowListener {
+    void onSearchOpen();
+
+    void onSearchClose();
   }
 }
