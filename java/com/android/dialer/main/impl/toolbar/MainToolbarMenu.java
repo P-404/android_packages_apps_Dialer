@@ -17,23 +17,33 @@
 package com.android.dialer.main.impl.toolbar;
 
 import android.content.Context;
-import android.support.v7.widget.PopupMenu;
+import android.support.v7.app.AppCompatActivity;
 import android.view.Gravity;
+import android.view.MenuItem;
 import android.view.View;
+import android.widget.PopupMenu;
+import com.android.dialer.simulator.Simulator;
+import com.android.dialer.simulator.SimulatorComponent;
 
 /** Popup menu accessible from the search bar */
-final class MainToolbarMenu extends PopupMenu {
+public final class MainToolbarMenu extends PopupMenu {
 
   public MainToolbarMenu(Context context, View anchor) {
-    super(context, anchor, Gravity.TOP);
-    // TODO(calderwoodra): menu should open from the top, not the bottom
+    super(context, anchor, Gravity.NO_GRAVITY, R.attr.actionOverflowMenuStyle, 0);
   }
 
-  @Override
-  public void show() {
-    super.show();
-    // TODO(calderwoodra): show/hide clear frequents
-    // TODO(calderwoodra): only show call history item if we have phone permission
-    // TODO(calderwoodra): show simulator buttons
+  public void showClearFrequents(boolean show) {
+    getMenu().findItem(R.id.clear_frequents).setVisible(show);
+  }
+
+  public void maybeShowSimulator(AppCompatActivity activity) {
+    MenuItem simulatorMenuItem = getMenu().findItem(R.id.menu_simulator_submenu);
+    Simulator simulator = SimulatorComponent.get(activity).getSimulator();
+    if (simulator.shouldShow()) {
+      simulatorMenuItem.setVisible(true);
+      simulatorMenuItem.setActionProvider(simulator.getActionProvider(activity));
+    } else {
+      simulatorMenuItem.setVisible(false);
+    }
   }
 }

@@ -24,7 +24,9 @@ import com.android.dialer.configprovider.SharedPrefConfigProviderModule;
 import com.android.dialer.duo.stub.StubDuoModule;
 import com.android.dialer.enrichedcall.stub.StubEnrichedCallModule;
 import com.android.dialer.feedback.stub.StubFeedbackModule;
+import com.android.dialer.glidephotomanager.GlidePhotoManagerModule;
 import com.android.dialer.inject.ContextModule;
+import com.android.dialer.metrics.StubMetricsModule;
 import com.android.dialer.phonelookup.PhoneLookupModule;
 import com.android.dialer.phonenumbergeoutil.impl.PhoneNumberGeoUtilModule;
 import com.android.dialer.precall.impl.PreCallModule;
@@ -54,6 +56,7 @@ import javax.inject.Singleton;
     CommandLineModule.class,
     ContextModule.class,
     DialerExecutorModule.class,
+    GlidePhotoManagerModule.class,
     MapsModule.class,
     PhoneLookupModule.class, // TODO(zachh): Module which uses APDL?
     PhoneNumberGeoUtilModule.class,
@@ -65,6 +68,7 @@ import javax.inject.Singleton;
     StubDuoModule.class,
     StubEnrichedCallModule.class,
     StubFeedbackModule.class,
+    StubMetricsModule.class,
     StubNewBubbleModule.class,
     StubSimSuggestionModule.class,
     StubSpamModule.class,

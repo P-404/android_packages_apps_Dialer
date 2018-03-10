@@ -23,6 +23,21 @@
   </pbundle_as_map>
 
   <pbundle_as_map>
+    <!-- Bouygues France -->
+    <string-array name="mccmnc">
+      <item value="20820"/>
+      <item value="20821"/>
+      <item value="20888"/>
+    </string-array>
+    <string name="feature_flag_name">vvm_carrier_flag_20820</string>
+    <int
+        name="vvm_port_number_int"
+        value="5499"/>
+    <string name="vvm_destination_number_string">22344</string>
+    <string name="vvm_type_string">vvm_type_omtp</string>
+  </pbundle_as_map>
+
+  <pbundle_as_map>
     <!-- Orange Belgium -->
     <string-array name="mccmnc">
       <item value="20610"/>
@@ -105,6 +120,21 @@
       <item value="AUTH=DIGEST-MD5"/>
     </string-array>
     <string name="vvm_carrier_allows_ott_transcription_string">true</string>
+  </pbundle_as_map>
+
+  <pbundle_as_map>
+    <!-- tracfone USA-->
+    <string name="feature_flag_name">vvm_carrier_flag_tracfone_usa</string>
+
+    <string-array name="mccmnc">
+      <item value="310260?gid1=4d4b"/>
+      <item value="310260?gid1=534d"/>
+      <item value="310260?gid1=6134"/>
+      <item value="310260?gid1=ddff"/>
+      <item value="310260?gid1=deff"/>
+    </string-array>
+
+    <string name="vvm_type_string">vvm_type_disable</string>>
   </pbundle_as_map>
 
   <pbundle_as_map>
