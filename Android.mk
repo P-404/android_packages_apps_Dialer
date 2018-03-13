@@ -114,6 +114,9 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
 	dialer-mime4j-dom-target \
 	dialer-error-prone-target \
 	dialer-guava-target \
+	dialer-glide-target \
+	dialer-glide-annotation-target \
+	dialer-zxing-target \
 	jsr305 \
 	libbackup \
 	libphonenumber \
@@ -121,7 +124,7 @@ LOCAL_STATIC_JAVA_LIBRARIES := \
 
 LOCAL_STATIC_ANDROID_LIBRARIES := \
 	android-support-core-ui \
-	android-support-design \
+	$(ANDROID_SUPPORT_DESIGN_TARGETS) \
 	android-support-transition \
 	android-support-v13 \
 	android-support-v4 \
@@ -135,11 +138,12 @@ LOCAL_JAVA_LIBRARIES := \
 
 LOCAL_ANNOTATION_PROCESSORS := \
 	dialer-auto-value \
+	dialer-javapoet \
 	dialer-dagger2 \
 	dialer-dagger2-compiler \
 	dialer-dagger2-producers \
-	dialer-glide-compiler \
 	dialer-glide-annotation \
+	dialer-glide-compiler \
 	dialer-guava \
 	dialer-javax-annotation-api \
 	dialer-javax-inject \
@@ -202,7 +206,8 @@ LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES := \
     dialer-grpc-stub:../../../prebuilts/tools/common/m2/repository/io/grpc/grpc-stub/1.0.3/grpc-stub-1.0.3.jar \
     dialer-guava:../../../prebuilts/tools/common/m2/repository/com/google/guava/guava/23.0/guava-23.0.jar \
     dialer-javax-annotation-api:../../../prebuilts/tools/common/m2/repository/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2.jar \
-    dialer-javax-inject:../../../prebuilts/tools/common/m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar
+    dialer-javax-inject:../../../prebuilts/tools/common/m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar \
+    dialer-javapoet:../../../prebuilts/tools/common/m2/repository/com/squareup/javapoet/1.8.0/javapoet-1.8.0.jar \
 
 include $(BUILD_HOST_PREBUILT)
 
@@ -264,6 +269,16 @@ LOCAL_MODULE_CLASS := JAVA_LIBRARIES
 LOCAL_MODULE := dialer-glide-target
 LOCAL_SDK_VERSION := current
 LOCAL_SRC_FILES := ../../../prebuilts/maven_repo/bumptech/com/github/bumptech/glide/glide/SNAPSHOT/glide-SNAPSHOT.jar
+LOCAL_UNINSTALLABLE_MODULE := true
+
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE_CLASS := JAVA_LIBRARIES
+LOCAL_MODULE := dialer-glide-annotation-target
+LOCAL_SDK_VERSION := current
+LOCAL_SRC_FILES := ../../../prebuilts/maven_repo/bumptech/com/github/bumptech/glide/annotation/SNAPSHOT/annotation-SNAPSHOT.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
@@ -399,3 +414,14 @@ LOCAL_UNINSTALLABLE_MODULE := true
 include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
+
+LOCAL_MODULE_CLASS := JAVA_LIBRARIES
+LOCAL_MODULE := dialer-zxing-target
+LOCAL_SDK_VERSION := current
+LOCAL_SRC_FILES := ../../../external/zxing/core/core.jar
+LOCAL_UNINSTALLABLE_MODULE := true
+
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+

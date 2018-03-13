@@ -20,14 +20,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.provider.ContactsContract;
-import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.text.TextUtils;
+import android.widget.Toast;
 import com.android.dialer.DialerPhoneNumber;
+import com.android.dialer.blockreportspam.ShowBlockReportSpamDialogNotifier;
 import com.android.dialer.clipboard.ClipboardUtils;
 import com.android.dialer.util.IntentUtil;
 import com.android.dialer.util.UriUtils;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Modules for the bottom sheet that are shared between NewVoicemailFragment and NewCallLogFragment
@@ -37,10 +39,15 @@ public class SharedModules {
   public static void maybeAddModuleForAddingToContacts(
       Context context,
       List<ContactActionModule> modules,
-      @NonNull DialerPhoneNumber number,
-      @Nullable String name,
-      @Nullable String lookupUri) {
-    // TODO(zachh): Only show this for non-spam/blocked numbers.
+      DialerPhoneNumber dialerPhoneNumber,
+      String name,
+      String lookupUri,
+      boolean isBlocked,
+      boolean isSpam) {
+    // Skip showing the menu item for a spam/blocked number.
+    if (isBlocked || isSpam) {
+      return;
+    }
 
     // Skip showing the menu item for existing contacts.
     if (isExistingContact(lookupUri)) {
@@ -48,7 +55,7 @@ public class SharedModules {
     }
 
     // Skip showing the menu item if there is no number.
-    String normalizedNumber = number.getNormalizedNumber();
+    String normalizedNumber = dialerPhoneNumber.getNormalizedNumber();
     if (TextUtils.isEmpty(normalizedNumber)) {
       return;
     }
@@ -83,22 +90,169 @@ public class SharedModules {
   }
 
   public static void maybeAddModuleForSendingTextMessage(
-      Context context, List<ContactActionModule> modules, String originalNumber) {
+      Context context,
+      List<ContactActionModule> modules,
+      String normalizedNumber,
+      boolean isBlocked) {
+    // Don't show the option to send a text message if the number is blocked.
+    if (isBlocked) {
+      return;
+    }
+
     // TODO(zachh): There are some conditions where this module should not be shown; consider
-    // voicemail, business numbers, blocked numbers, spam numbers, etc.
-    if (!TextUtils.isEmpty(originalNumber)) {
+    // voicemail, business numbers, etc.
+
+    if (!TextUtils.isEmpty(normalizedNumber)) {
       modules.add(
           new IntentModule(
               context,
-              IntentUtil.getSendSmsIntent(originalNumber),
+              IntentUtil.getSendSmsIntent(normalizedNumber),
               R.string.send_a_message,
               R.drawable.quantum_ic_message_vd_theme_24));
     }
   }
 
+  /**
+   * Add modules related to blocking/unblocking a number and/or reporting it as spam/not spam.
+   *
+   * @param normalizedNumber The number to be blocked / unblocked / marked as spam/not spam
+   * @param countryIso The ISO 3166-1 two letters country code for the number
+   * @param callType Call type defined in {@link android.provider.CallLog.Calls}
+   */
+  public static void addModulesHandlingBlockedOrSpamNumber(
+      Context context,
+      List<ContactActionModule> modules,
+      String normalizedNumber,
+      String countryIso,
+      int callType,
+      boolean isBlocked,
+      boolean isSpam) {
+    // For a spam number, add two options:
+    // (1) "Not spam" and "Block", or
+    // (2) "Not spam" and "Unblock".
+    if (isSpam) {
+      addModuleForMarkingNumberAsNonSpam(context, modules, normalizedNumber, countryIso, callType);
+      addModuleForBlockingOrUnblockingNumber(context, modules, normalizedNumber, isBlocked);
+      return;
+    }
+
+    // For a blocked non-spam number, add "Unblock" option.
+    if (isBlocked) {
+      addModuleForBlockingOrUnblockingNumber(context, modules, normalizedNumber, isBlocked);
+      return;
+    }
+
+    // For a number that is neither a spam number nor blocked, add "Block/Report spam" option.
+    addModuleForBlockingNumberAndOptionallyReportingSpam(
+        context, modules, normalizedNumber, countryIso, callType);
+  }
+
+  /**
+   * Add "Not spam" module.
+   *
+   * @param normalizedNumber The number to be marked as not spam
+   * @param countryIso The ISO 3166-1 two letters country code for the number
+   * @param callType Call type defined in {@link android.provider.CallLog.Calls}
+   */
+  private static void addModuleForMarkingNumberAsNonSpam(
+      Context context,
+      List<ContactActionModule> modules,
+      String normalizedNumber,
+      String countryIso,
+      int callType) {
+    modules.add(
+        new ContactActionModule() {
+          @Override
+          public int getStringId() {
+            return R.string.not_spam;
+          }
+
+          @Override
+          public int getDrawableId() {
+            return R.drawable.quantum_ic_report_off_vd_theme_24;
+          }
+
+          @Override
+          public boolean onClick() {
+            ShowBlockReportSpamDialogNotifier.notifyShowDialogToReportNotSpam(
+                context, normalizedNumber, countryIso, callType);
+            return true; // Close the bottom sheet.
+          }
+        });
+  }
+
+  private static void addModuleForBlockingOrUnblockingNumber(
+      Context context,
+      List<ContactActionModule> modules,
+      String normalizedNumber,
+      boolean isBlocked) {
+    modules.add(
+        new ContactActionModule() {
+          @Override
+          public int getStringId() {
+            return isBlocked ? R.string.unblock_number : R.string.block_number;
+          }
+
+          @Override
+          public int getDrawableId() {
+            return isBlocked
+                ? R.drawable.ic_unblock // TODO(a bug): use a vector icon
+                : R.drawable.quantum_ic_block_vd_theme_24;
+          }
+
+          @Override
+          public boolean onClick() {
+            // TODO(a bug): implement this method.
+            Toast.makeText(
+                    context,
+                    String.format(
+                        Locale.ENGLISH,
+                        "TODO: " + (isBlocked ? "Unblock " : "Block ") + " number %s.",
+                        normalizedNumber),
+                    Toast.LENGTH_SHORT)
+                .show();
+            return true; // Close the bottom sheet.
+          }
+        });
+  }
+
+  /**
+   * Add "Block/Report spam" module
+   *
+   * @param normalizedNumber The number to be blocked / unblocked / marked as spam/not spam
+   * @param countryIso The ISO 3166-1 two letters country code for the number
+   * @param callType Call type defined in {@link android.provider.CallLog.Calls}
+   */
+  private static void addModuleForBlockingNumberAndOptionallyReportingSpam(
+      Context context,
+      List<ContactActionModule> modules,
+      String normalizedNumber,
+      String countryIso,
+      int callType) {
+    modules.add(
+        new ContactActionModule() {
+          @Override
+          public int getStringId() {
+            return R.string.block_and_optionally_report_spam;
+          }
+
+          @Override
+          public int getDrawableId() {
+            return R.drawable.quantum_ic_block_vd_theme_24;
+          }
+
+          @Override
+          public boolean onClick() {
+            ShowBlockReportSpamDialogNotifier.notifyShowDialogToBlockNumberAndOptionallyReportSpam(
+                context, normalizedNumber, countryIso, callType);
+            return true; // Close the bottom sheet.
+          }
+        });
+  }
+
   public static void maybeAddModuleForCopyingNumber(
-      Context context, List<ContactActionModule> modules, String originalNumber) {
-    if (TextUtils.isEmpty(originalNumber)) {
+      Context context, List<ContactActionModule> modules, String normalizedNumber) {
+    if (TextUtils.isEmpty(normalizedNumber)) {
       return;
     }
     modules.add(
@@ -115,7 +269,7 @@ public class SharedModules {
 
           @Override
           public boolean onClick() {
-            ClipboardUtils.copyText(context, null, originalNumber, true);
+            ClipboardUtils.copyText(context, null, normalizedNumber, true);
             return false;
           }
         });

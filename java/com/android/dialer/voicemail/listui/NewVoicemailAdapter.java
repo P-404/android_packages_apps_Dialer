@@ -16,16 +16,18 @@
 package com.android.dialer.voicemail.listui;
 
 import android.app.FragmentManager;
+import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.database.Cursor;
 import android.media.MediaPlayer;
 import android.media.MediaPlayer.OnCompletionListener;
 import android.media.MediaPlayer.OnErrorListener;
 import android.media.MediaPlayer.OnPreparedListener;
 import android.net.Uri;
+import android.provider.VoicemailContract.Voicemails;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
-import android.support.annotation.VisibleForTesting;
 import android.support.annotation.WorkerThread;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.ViewHolder;
@@ -38,20 +40,20 @@ import android.view.ViewGroup;
 import com.android.dialer.calllogutils.CallLogDates;
 import com.android.dialer.common.Assert;
 import com.android.dialer.common.LogUtil;
-import com.android.dialer.common.concurrent.DialerExecutor.SuccessListener;
 import com.android.dialer.common.concurrent.DialerExecutor.Worker;
 import com.android.dialer.common.concurrent.DialerExecutorComponent;
 import com.android.dialer.common.concurrent.ThreadUtil;
+import com.android.dialer.glidephotomanager.GlidePhotoManager;
 import com.android.dialer.time.Clock;
 import com.android.dialer.voicemail.listui.NewVoicemailViewHolder.NewVoicemailViewHolderListener;
 import com.android.dialer.voicemail.listui.error.VoicemailErrorMessage;
 import com.android.dialer.voicemail.listui.error.VoicemailErrorMessageCreator;
 import com.android.dialer.voicemail.listui.error.VoicemailStatus;
 import com.android.dialer.voicemail.model.VoicemailEntry;
+import com.android.voicemail.VoicemailClient;
+import com.google.common.collect.ImmutableList;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
@@ -73,8 +75,8 @@ final class NewVoicemailAdapter extends RecyclerView.Adapter<ViewHolder>
   }
 
   private Cursor cursor;
-  private Cursor voicemailStatusCursor;
   private final Clock clock;
+  private final GlidePhotoManager glidePhotoManager;
 
   /** {@link Integer#MAX_VALUE} when the "Today" header should not be displayed. */
   private int todayHeaderPosition = Integer.MAX_VALUE;
@@ -117,11 +119,16 @@ final class NewVoicemailAdapter extends RecyclerView.Adapter<ViewHolder>
       new NewVoicemailMediaPlayer(new MediaPlayer());
 
   /** @param cursor whose projection is {@link VoicemailCursorLoader#VOICEMAIL_COLUMNS} */
-  NewVoicemailAdapter(Cursor cursor, Clock clock, FragmentManager fragmentManager) {
+  NewVoicemailAdapter(
+      Cursor cursor,
+      Clock clock,
+      FragmentManager fragmentManager,
+      GlidePhotoManager glidePhotoManager) {
     LogUtil.enterBlock("NewVoicemailAdapter");
     this.cursor = cursor;
     this.clock = clock;
     this.fragmentManager = fragmentManager;
+    this.glidePhotoManager = glidePhotoManager;
     initializeMediaPlayerListeners();
     updateHeaderPositions();
   }
@@ -223,7 +230,7 @@ final class NewVoicemailAdapter extends RecyclerView.Adapter<ViewHolder>
       case NewVoicemailAdapter.RowType.VOICEMAIL_ENTRY:
         view = inflater.inflate(R.layout.new_voicemail_entry, viewGroup, false);
         NewVoicemailViewHolder newVoicemailViewHolder =
-            new NewVoicemailViewHolder(view, clock, this);
+            new NewVoicemailViewHolder(view, clock, this, glidePhotoManager);
         newVoicemailViewHolderSet.add(newVoicemailViewHolder);
         return newVoicemailViewHolder;
       default:
@@ -633,32 +640,37 @@ final class NewVoicemailAdapter extends RecyclerView.Adapter<ViewHolder>
 
     collapseExpandedViewHolder(expandedViewHolder);
 
-    Worker<Pair<Context, Uri>, Integer> deleteVoicemail = this::deleteVoicemail;
-    SuccessListener<Integer> deleteVoicemailCallBack = this::onVoicemailDeleted;
+    Worker<Pair<Context, Uri>, Void> deleteVoicemail = this::deleteVoicemail;
 
     DialerExecutorComponent.get(context)
         .dialerExecutorFactory()
-        .createUiTaskBuilder(fragmentManager, "delete_voicemail", deleteVoicemail)
-        .onSuccess(deleteVoicemailCallBack)
+        .createNonUiTaskBuilder(deleteVoicemail)
         .build()
         .executeSerial(new Pair<>(context, voicemailUri));
 
     notifyItemRemoved(expandedViewHolder.getAdapterPosition());
   }
 
-  private void onVoicemailDeleted(Integer integer) {
-    LogUtil.i("NewVoicemailAdapter.onVoicemailDeleted", "return value:%d", integer);
-    Assert.checkArgument(integer == 1, "voicemail delete was not successful");
-  }
-
   @WorkerThread
-  private Integer deleteVoicemail(Pair<Context, Uri> contextUriPair) {
+  private Void deleteVoicemail(Pair<Context, Uri> contextUriPair) {
     Assert.isWorkerThread();
     LogUtil.enterBlock("NewVoicemailAdapter.deleteVoicemail");
+
     Context context = contextUriPair.first;
     Uri uri = contextUriPair.second;
     LogUtil.i("NewVoicemailAdapter.deleteVoicemail", "deleting uri:%s", String.valueOf(uri));
-    return context.getContentResolver().delete(uri, null, null);
+    ContentValues values = new ContentValues();
+    values.put(Voicemails.DELETED, "1");
+
+    int numRowsUpdated = context.getContentResolver().update(uri, values, null, null);
+
+    LogUtil.i("NewVoicemailAdapter.onVoicemailDeleted", "return value:%d", numRowsUpdated);
+    Assert.checkArgument(numRowsUpdated == 1, "voicemail delete was not successful");
+
+    Intent intent = new Intent(VoicemailClient.ACTION_UPLOAD);
+    intent.setPackage(context.getPackageName());
+    context.sendBroadcast(intent);
+    return null;
   }
 
   /**
@@ -873,6 +885,7 @@ final class NewVoicemailAdapter extends RecyclerView.Adapter<ViewHolder>
       new OnErrorListener() {
         @Override
         public boolean onError(MediaPlayer mp, int what, int extra) {
+          LogUtil.e("NewVoicemailAdapter.onError", "onError, what:%d, extra:%d", what, extra);
           Assert.checkArgument(
               mediaPlayer.getMediaPlayer().equals(mp),
               "there should always only be one instance of the media player");
@@ -1002,36 +1015,24 @@ final class NewVoicemailAdapter extends RecyclerView.Adapter<ViewHolder>
     }
   }
 
-  @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
-  public void setVoicemailStatusCursor(Cursor voicemailStatusCursor) {
-    this.voicemailStatusCursor = voicemailStatusCursor;
-  }
+  /**
+   * Updates the voicemail alert message to reflect the state of the {@link VoicemailStatus} table.
+   * TODO(uabdullah): Handle ToS properly (a bug)
+   */
+  public void updateVoicemailAlertWithMostRecentStatus(
+      Context context, ImmutableList<VoicemailStatus> voicemailStatuses) {
 
-  // TODO(uabdullah): Handle ToS properly
-  public void updateAlert(Context context) {
-    if (voicemailStatusCursor == null) {
-      LogUtil.i("NewVoicemailAdapter.updateAlert", "status cursor was null");
+    if (voicemailStatuses.isEmpty()) {
+      LogUtil.i(
+          "NewVoicemailAdapter.updateVoicemailAlertWithMostRecentStatus",
+          "voicemailStatuses was empty");
       return;
-    }
-
-    LogUtil.i(
-        "NewVoicemailAdapter.updateAlert",
-        "status cursor size was " + voicemailStatusCursor.getCount());
-
-    List<VoicemailStatus> statuses = new ArrayList<>();
-
-    while (voicemailStatusCursor.moveToNext()) {
-      VoicemailStatus status = new VoicemailStatus(context, voicemailStatusCursor);
-      if (status.isActive()) {
-        statuses.add(status);
-        // TODO(uabdullah): addServiceStateListener
-      }
     }
 
     voicemailErrorMessage = null;
     VoicemailErrorMessageCreator messageCreator = new VoicemailErrorMessageCreator();
 
-    for (VoicemailStatus status : statuses) {
+    for (VoicemailStatus status : voicemailStatuses) {
       voicemailErrorMessage = messageCreator.create(context, status, null);
       if (voicemailErrorMessage != null) {
         break;
@@ -1039,6 +1040,7 @@ final class NewVoicemailAdapter extends RecyclerView.Adapter<ViewHolder>
     }
 
     if (voicemailErrorMessage != null) {
+      LogUtil.i("NewVoicemailAdapter.updateVoicemailAlertWithMostRecentStatus", "showing alert");
       voicemailAlertPosition = 0;
       updateHeaderPositions();
       notifyItemChanged(0);
