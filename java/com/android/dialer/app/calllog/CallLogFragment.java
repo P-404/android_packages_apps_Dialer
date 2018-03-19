@@ -222,18 +222,6 @@ public class CallLogFragment extends Fragment
     final Activity activity = getActivity();
     final ContentResolver resolver = activity.getContentResolver();
     callLogQueryHandler = new CallLogQueryHandler(activity, resolver, this, logLimit);
-
-    if (PermissionsUtil.hasCallLogReadPermissions(getContext())) {
-      resolver.registerContentObserver(CallLog.CONTENT_URI, true, callLogObserver);
-    } else {
-      LogUtil.w("CallLogFragment.onCreate", "call log permission not available");
-    }
-    if (PermissionsUtil.hasContactsReadPermissions(getContext())) {
-      resolver.registerContentObserver(
-          ContactsContract.Contacts.CONTENT_URI, true, contactsObserver);
-    } else {
-      LogUtil.w("CallLogFragment.onCreate", "contacts permission not available.");
-    }
     setHasOptionsMenu(true);
   }
 
@@ -412,6 +400,19 @@ public class CallLogFragment extends Fragment
       updateEmptyMessage(callTypeFilter);
     }
 
+    ContentResolver resolver = getActivity().getContentResolver();
+    if (PermissionsUtil.hasCallLogReadPermissions(getContext())) {
+      resolver.registerContentObserver(CallLog.CONTENT_URI, true, callLogObserver);
+    } else {
+      LogUtil.w("CallLogFragment.onCreate", "call log permission not available");
+    }
+    if (PermissionsUtil.hasContactsReadPermissions(getContext())) {
+      resolver.registerContentObserver(
+          ContactsContract.Contacts.CONTENT_URI, true, contactsObserver);
+    } else {
+      LogUtil.w("CallLogFragment.onCreate", "contacts permission not available.");
+    }
+
     this.hasReadCallLogPermission = hasReadCallLogPermission;
 
     /*
@@ -432,6 +433,8 @@ public class CallLogFragment extends Fragment
   @Override
   public void onPause() {
     LogUtil.enterBlock("CallLogFragment.onPause");
+    getActivity().getContentResolver().unregisterContentObserver(callLogObserver);
+    getActivity().getContentResolver().unregisterContentObserver(contactsObserver);
     if (getUserVisibleHint()) {
       onNotVisible();
     }
@@ -465,9 +468,6 @@ public class CallLogFragment extends Fragment
     if (adapter != null) {
       adapter.changeCursor(null);
     }
-
-    getActivity().getContentResolver().unregisterContentObserver(callLogObserver);
-    getActivity().getContentResolver().unregisterContentObserver(contactsObserver);
     super.onDestroy();
   }
 
@@ -583,7 +583,7 @@ public class CallLogFragment extends Fragment
     } else if (!isCallLogActivity) {
       LogUtil.i("CallLogFragment.onEmptyViewActionButtonClicked", "showing dialpad");
       // Show dialpad if we are not in the call log activity.
-      ((HostInterface) activity).showDialpad();
+      FragmentUtils.getParentUnsafe(this, HostInterface.class).showDialpad();
     }
   }
 
@@ -626,7 +626,7 @@ public class CallLogFragment extends Fragment
   @CallSuper
   public void onVisible() {
     LogUtil.enterBlock("CallLogFragment.onPageSelected");
-    if (getActivity() != null && getActivity() instanceof HostInterface) {
+    if (getActivity() != null && FragmentUtils.getParent(this, HostInterface.class) != null) {
       FragmentUtils.getParentUnsafe(this, HostInterface.class)
           .enableFloatingButton(!isModalAlertVisible());
     }
