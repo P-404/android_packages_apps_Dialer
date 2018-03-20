@@ -88,6 +88,7 @@ import com.android.dialer.location.GeoUtil;
 import com.android.dialer.logging.UiAction;
 import com.android.dialer.oem.MotorolaUtils;
 import com.android.dialer.performancereport.PerformanceReport;
+import com.android.dialer.phonenumberutil.PhoneNumberHelper;
 import com.android.dialer.precall.PreCall;
 import com.android.dialer.proguard.UsedByReflection;
 import com.android.dialer.telecom.TelecomUtil;
@@ -220,8 +221,7 @@ public class DialpadFragment extends Fragment
    * @return the provided string of digits as a formatted phone number, retaining any post-dial
    *     portion of the string.
    */
-  @VisibleForTesting
-  static String getFormattedDigits(String dialString, String normalizedNumber, String countryIso) {
+  String getFormattedDigits(String dialString, String normalizedNumber, String countryIso) {
     String number = PhoneNumberUtils.extractNetworkPortion(dialString);
     // Also retrieve the post dial portion of the provided data, so that the entire dial
     // string can be reconstituted later.
@@ -231,7 +231,7 @@ public class DialpadFragment extends Fragment
       return postDial;
     }
 
-    number = PhoneNumberUtils.formatNumber(number, normalizedNumber, countryIso);
+    number = PhoneNumberHelper.formatNumber(getContext(), number, normalizedNumber, countryIso);
 
     if (TextUtils.isEmpty(postDial)) {
       return number;
@@ -1312,7 +1312,9 @@ public class DialpadFragment extends Fragment
    *     or ringing or dialing, or on hold).
    */
   private boolean isPhoneInUse() {
-    return getContext() != null && TelecomUtil.isInManagedCall(getContext());
+    return getContext() != null
+        && TelecomUtil.isInManagedCall(getContext())
+        && FragmentUtils.getParentUnsafe(this, HostInterface.class).shouldShowDialpadChooser();
   }
 
   /** @return true if the phone is a CDMA phone type */
@@ -1584,6 +1586,9 @@ public class DialpadFragment extends Fragment
      * unless there happens to be content showing.
      */
     boolean onDialpadSpacerTouchWithEmptyQuery();
+
+    /** Returns true if this fragment's parent want the dialpad to show the dialpad chooser. */
+    boolean shouldShowDialpadChooser();
   }
 
   /**
