@@ -38,6 +38,11 @@ EXCLUDE_FILES := \
 EXCLUDE_FILES += \
 	$(BASE_DIR)/contacts/common/format/testing/SpannedTestUtils.java
 
+# Exclude rootcomponentgenerator
+EXCLUDE_FILES += \
+	$(call all-java-files-under, $(BASE_DIR)/dialer/rootcomponentgenerator) \
+	$(call all-java-files-under, $(BASE_DIR)/dialer/inject/demo)
+
 # Exclude build variants for now
 EXCLUDE_FILES += \
 	$(BASE_DIR)/dialer/constants/googledialer/ConstantsImpl.java \
@@ -72,7 +77,10 @@ LOCAL_FULL_LIBS_MANIFEST_FILES := \
 
 LOCAL_SRC_FILES := $(call all-java-files-under, $(BASE_DIR))
 LOCAL_SRC_FILES += $(call all-proto-files-under, $(BASE_DIR))
+LOCAL_SRC_FILES += $(call all-Iaidl-files-under, $(BASE_DIR))
 LOCAL_SRC_FILES := $(filter-out $(EXCLUDE_FILES),$(LOCAL_SRC_FILES))
+
+LOCAL_AIDL_INCLUDES := $(call all-Iaidl-files-under, $(BASE_DIR))
 
 LOCAL_PROTOC_FLAGS := --proto_path=$(LOCAL_PATH)
 
@@ -139,7 +147,7 @@ LOCAL_JAVA_LIBRARIES := \
 
 LOCAL_ANNOTATION_PROCESSORS := \
 	dialer-auto-value \
-	dialer-javapoet \
+	javapoet-prebuilt-jar \
 	dialer-dagger2 \
 	dialer-dagger2-compiler \
 	dialer-dagger2-producers \
@@ -148,10 +156,10 @@ LOCAL_ANNOTATION_PROCESSORS := \
 	dialer-guava \
 	dialer-javax-annotation-api \
 	dialer-javax-inject \
+	dialer-rootcomponentprocessor
 
 LOCAL_ANNOTATION_PROCESSOR_CLASSES := \
-  com.google.auto.value.processor.AutoValueProcessor,dagger.internal.codegen.ComponentProcessor,com.bumptech.glide.annotation.compiler.GlideAnnotationProcessor
-
+  com.google.auto.value.processor.AutoValueProcessor,dagger.internal.codegen.ComponentProcessor,com.bumptech.glide.annotation.compiler.GlideAnnotationProcessor,com.android.dialer.rootcomponentgenerator.RootComponentProcessor
 
 # Begin Bug: 37077388
 LOCAL_DX_FLAGS := --multi-dex
@@ -208,7 +216,8 @@ LOCAL_PREBUILT_STATIC_JAVA_LIBRARIES := \
     dialer-guava:../../../prebuilts/tools/common/m2/repository/com/google/guava/guava/23.0/guava-23.0.jar \
     dialer-javax-annotation-api:../../../prebuilts/tools/common/m2/repository/javax/annotation/javax.annotation-api/1.2/javax.annotation-api-1.2.jar \
     dialer-javax-inject:../../../prebuilts/tools/common/m2/repository/javax/inject/javax.inject/1/javax.inject-1.jar \
-    dialer-javapoet:../../../prebuilts/tools/common/m2/repository/com/squareup/javapoet/1.8.0/javapoet-1.8.0.jar \
+    dialer-auto-service:../../../prebuilts/tools/common/m2/repository/com/google/auto/service/auto-service/1.0-rc2/auto-service-1.0-rc2.jar \
+    dialer-auto-common:../../../prebuilts/tools/common/m2/repository/com/google/auto/auto-common/0.9/auto-common-0.9.jar \
 
 include $(BUILD_HOST_PREBUILT)
 
@@ -423,6 +432,35 @@ LOCAL_SRC_FILES := ../../../external/zxing/core/core.jar
 LOCAL_UNINSTALLABLE_MODULE := true
 
 include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+
+LOCAL_MODULE := dialer-rootcomponentprocessor
+LOCAL_MODULE_CLASS := JAVA_LIBRARIES
+LOCAL_IS_HOST_MODULE := true
+BASE_DIR := java/com/android
+
+LOCAL_SRC_FILES := \
+	$(call all-java-files-under, $(BASE_DIR)/dialer/rootcomponentgenerator) \
+        $(BASE_DIR)/dialer/inject/DialerRootComponent.java \
+        $(BASE_DIR)/dialer/inject/DialerVariant.java \
+        $(BASE_DIR)/dialer/inject/HasRootComponent.java \
+        $(BASE_DIR)/dialer/inject/IncludeInDialerRoot.java \
+        $(BASE_DIR)/dialer/inject/InstallIn.java \
+        $(BASE_DIR)/dialer/inject/RootComponentGeneratorMetadata.java
+
+LOCAL_STATIC_JAVA_LIBRARIES := \
+	dialer-guava \
+	dialer-dagger2 \
+	javapoet-prebuilt-jar \
+	dialer-auto-service \
+	dialer-auto-common \
+	dialer-javax-annotation-api \
+	dialer-javax-inject
+
+LOCAL_JAVA_LANGUAGE_VERSION := 1.8
+
+include $(BUILD_HOST_JAVA_LIBRARY)
 
 include $(CLEAR_VARS)
 endif #TARGET_HAS_LOW_RAM
