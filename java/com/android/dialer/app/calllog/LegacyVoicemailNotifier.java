@@ -181,6 +181,7 @@ public final class LegacyVoicemailNotifier {
     if (context.getSystemService(TelephonyManager.class).getPhoneCount() <= 1) {
       return NOTIFICATION_TAG;
     }
+
     return NOTIFICATION_TAG_PREFIX + phoneAccountHandle.getId();
   }
 
