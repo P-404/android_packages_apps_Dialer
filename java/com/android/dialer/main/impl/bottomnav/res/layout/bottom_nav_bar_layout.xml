@@ -19,8 +19,8 @@
     android:orientation="horizontal"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?android:attr/colorBackgroundFloating"
-    android:elevation="8dp">
+    android:background="?android:windowBackground"
+    android:elevation="5dp">
 
   <include
       android:id="@+id/speed_dial_tab"
